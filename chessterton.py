@@ -3,13 +3,11 @@
 # documented for future reference.
 
 # 19 June 2020: project started
+# 20 June 2020: chessboard drawn
+# 21 June 2020: (test - github update)
 
 
 
-
-
-# 1) begin coding with pygame right away
-# 2) 8x8 board on the screen, label, quit works
 
 import sys
 import pygame as pg
