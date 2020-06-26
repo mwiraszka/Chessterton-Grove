@@ -1,6 +1,6 @@
-# Chessterton Grove will be an on-going practice project, with the sole goal to
-# make the most sophisticated chess platform possible, with all progress
-# documented for future reference.
+# Chessterton Grove is an on-going practice project, with goals to
+# 1) make the most sophisticated chess platform possible, while
+# 2) documenting all progress for future reference.
 
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
@@ -9,7 +9,7 @@
 # 22.06.20 (temp: dimensions changed)
 # 24.06.20 chess pieces drawn
 # 25.06.20 select chess square enabled
-
+# 26.06.20 (code cleaned up)
 
 
 import sys
@@ -21,39 +21,31 @@ WINW = 600
 WINH = 600
 win = pg.display.set_mode((WINW, WINH), 0, 32)
 pg.display.set_caption("Chessterton Grove")
+FPS = 60
+clock = pg.time.Clock()
 
 BLACK = (10,10,10)
 WHITE = (245,245,245)
-RED = (220,20,20)
 BOARD_BLACK = (80,70,60)
 BOARD_WHITE = (200,200,200)
+RED = (220,20,20)
 BROWN = (139,69,19)
 YELLOW = (200,200,0)
 GREEN = (34,139,34)
 
-FPS = 60
-
 pg.font.get_fonts()
 coord_font = pg.font.SysFont('helvetica', 18, False, False)
 
-clock = pg.time.Clock()
-
-sheet = pg.image.load('chess_set.png').convert_alpha()
-bQ = sheet.subsurface((0,0,50,50))
-bK = sheet.subsurface((50,0,50,50))
-bR = sheet.subsurface((100,0,50,50))
-bN = sheet.subsurface((150,0,50,50))
-bB = sheet.subsurface((200,0,50,50))
-bP = sheet.subsurface((250,0,50,50))
-wQ = sheet.subsurface((0,50,50,50))
-wK = sheet.subsurface((50,50,50,50))
-wR = sheet.subsurface((100,50,50,50))
-wN = sheet.subsurface((150,50,50,50))
-wB = sheet.subsurface((200,50,50,50))
-wP = sheet.subsurface((250,50,50,50))
-
-# Init as out of bounds selection - no square selected
 sq_coord = [9,0]
+
+# b[0]-b[5]/w[0]-w[5]: queen, king, rook, knight, bishop, pawn, respectively
+sheet = pg.image.load('chess_set.png').convert_alpha()
+b = [None] * 6
+w = [None] * 6
+for i in range(6):
+	b[i] = sheet.subsurface((i*50,0,50,50))
+	w[i] = sheet.subsurface((i*50,50,50,50))
+
 
 def terminate():
 	pg.quit()
@@ -75,50 +67,54 @@ def drawBoard():
 		text_surface = coord_font.render(('{}'.format(chr(65+i))), False, BLACK)
 		win.blit(text_surface, (122+50*i,504))
 
-def drawPieces():
-	win.blit(bR, (100,100))
-	win.blit(bN, (150,100))
-	win.blit(bB, (200,100))
-	win.blit(bQ, (250,100))
-	win.blit(bK, (300,100))
-	win.blit(bB, (350,100))
-	win.blit(bN, (400,100))
-	win.blit(bR, (450,100))
+def initPieces():
+	win.blit(b[2], (100,100))
+	win.blit(b[3], (150,100))
+	win.blit(b[4], (200,100))
+	win.blit(b[1], (250,100))
+	win.blit(b[0], (300,100))
+	win.blit(b[4], (350,100))
+	win.blit(b[3], (400,100))
+	win.blit(b[2], (450,100))
 	for i in range(0,8):
-		win.blit(bP, (100+i*50,150))
-		win.blit(wP, (100+i*50,400))
-	win.blit(wR, (100,450))
-	win.blit(wN, (150,450))
-	win.blit(wB, (200,450))
-	win.blit(wQ, (250,450))
-	win.blit(wK, (300,450))
-	win.blit(wB, (350,450))
-	win.blit(wN, (400,450))
-	win.blit(wR, (450,450))
+		win.blit(b[5], (100+i*50,150))
+		win.blit(w[5], (100+i*50,400))
+	win.blit(w[2], (100,450))
+	win.blit(w[3], (150,450))
+	win.blit(w[4], (200,450))
+	win.blit(w[1], (250,450))
+	win.blit(w[0], (300,450))
+	win.blit(w[4], (350,450))
+	win.blit(w[3], (400,450))
+	win.blit(w[2], (450,450))
 
 def drawSqSelect(sq):
-	if sq[0] < 9:
-		pg.draw.lines(win, RED, True, [(100+sq[0]*50,100+sq[1]*50), (150+sq[0]*50,100+sq[1]*50),\
-			(150+sq[0]*50,150+sq[1]*50), (100+sq[0]*50,150+sq[1]*50)], 3)
+	# Start at 100 and add coordinate values multipled by a factor of 50
+	pg.draw.lines(win, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
+		(150+sq[0]*50,100+sq[1]*50),(150+sq[0]*50,150+sq[1]*50),\
+		(100+sq[0]*50,150+sq[1]*50)], 3)
 
 
 while True:
 	win.fill(GREEN)
 	drawBoard()
-	drawPieces()
-	drawSqSelect(sq_coord)
+	initPieces()
+	if sq_coord[0] < 9:
+		drawSqSelect(sq_coord)
 	event = pg.event.get()
 	for e in event:
 		if e.type == pg.MOUSEBUTTONUP:
-			# sq_select tuple corresponds to the x and y values of
-			# the 8x8 board with indeces starting at 0, i.e. A1 = (0,0), C5 = (2,4), etc.
+			# Store coordinate of the selected square on the 8x8 board, with
+			# indeces starting at 0 (e.g. A1 = (0,0), C5 = (2,4), etc.)
 			for i in range(8):
-				# Store x- and y-coords of clicked square
-				if pg.mouse.get_pos()[0] >= (100+i*50) and pg.mouse.get_pos()[0] < (150+i*50):
+				# Store x- and y-coords of clicked square, indeces starting at 0
+				if pg.mouse.get_pos()[0] >= (100+i*50) and\
+				pg.mouse.get_pos()[0] < (150+i*50):
 					sq_coord[0] = i
-				if pg.mouse.get_pos()[1] >= (100+i*50) and pg.mouse.get_pos()[1] < (150+i*50):
+				if pg.mouse.get_pos()[1] >= (100+i*50) and\
+				pg.mouse.get_pos()[1] < (150+i*50):
 					sq_coord[1] = i
-				# Use x-coord of 9 as indicator that click is out of bounds
+				# Click is out of bounds (use x = 9 as an indicator)
 				if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
 				pg.mouse.get_pos()[1] >= 500 or pg.mouse.get_pos()[1] < 100:
 					sq_coord[0] = 9
