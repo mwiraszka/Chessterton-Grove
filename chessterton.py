@@ -8,6 +8,7 @@
 # 21.06.20 chessboard drawing corrected, coordinates drawn
 # 22.06.20 (temp: dimensions changed)
 # 24.06.20 chess pieces drawn
+# 25.06.20 select chess square enabled
 
 
 
@@ -23,6 +24,7 @@ pg.display.set_caption("Chessterton Grove")
 
 BLACK = (10,10,10)
 WHITE = (245,245,245)
+RED = (220,20,20)
 BOARD_BLACK = (80,70,60)
 BOARD_WHITE = (200,200,200)
 BROWN = (139,69,19)
@@ -35,20 +37,6 @@ pg.font.get_fonts()
 coord_font = pg.font.SysFont('helvetica', 18, False, False)
 
 clock = pg.time.Clock()
-
-# wP = pg.image.load('pieces/white_pawn.png')
-# wR = pg.image.load('pieces/white_rook.png')
-# wN = pg.image.load('pieces/white_knight.png')
-# wB = pg.image.load('pieces/white_bishop.png')
-# wQ = pg.image.load('pieces/white_queen.png')
-# wK = pg.image.load('pieces/white_king.png')
-
-# bP = pg.image.load('pieces/black_pawn.png')
-# bR = pg.image.load('pieces/black_rook.png')
-# bN = pg.image.load('pieces/black_knight.png')
-# bB = pg.image.load('pieces/black_bishop.png')
-# bQ = pg.image.load('pieces/black_queen.png')
-# bK = pg.image.load('pieces/black_king.png')
 
 sheet = pg.image.load('chess_set.png').convert_alpha()
 bQ = sheet.subsurface((0,0,50,50))
@@ -64,6 +52,8 @@ wN = sheet.subsurface((150,50,50,50))
 wB = sheet.subsurface((200,50,50,50))
 wP = sheet.subsurface((250,50,50,50))
 
+# Init as out of bounds selection - no square selected
+sq_coord = [9,0]
 
 def terminate():
 	pg.quit()
@@ -71,13 +61,13 @@ def terminate():
 
 def drawBoard():
 	pg.draw.rect(win, BROWN, (80,80,440,440))
-	for i in range(0,8):
-		for j in range(0,8):
+	for i in range(8):
+		for j in range(8):
 			if (i+j)%2 == 1:
 				pg.draw.rect(win, BOARD_BLACK, ((100+50*i),(100+50*j),50,50))
 			else:
 				pg.draw.rect(win, BOARD_WHITE, ((100+50*i),(100+50*j),50,50))
-	for i in range(0,8):
+	for i in range(8):
 		# Draw digits 1-8 along side
 		text_surface = coord_font.render(('{}'.format(i+1)), False, BLACK)
 		win.blit(text_surface, (88,468-50*i))
@@ -105,20 +95,39 @@ def drawPieces():
 	win.blit(wB, (350,450))
 	win.blit(wN, (400,450))
 	win.blit(wR, (450,450))
-	
+
+def drawSqSelect(sq):
+	if sq[0] < 9:
+		pg.draw.lines(win, RED, True, [(100+sq[0]*50,100+sq[1]*50), (150+sq[0]*50,100+sq[1]*50),\
+			(150+sq[0]*50,150+sq[1]*50), (100+sq[0]*50,150+sq[1]*50)], 3)
 
 
 while True:
 	win.fill(GREEN)
 	drawBoard()
 	drawPieces()
-	for event in pg.event.get():
-		if event.type == QUIT:
+	drawSqSelect(sq_coord)
+	event = pg.event.get()
+	for e in event:
+		if e.type == pg.MOUSEBUTTONUP:
+			# sq_select tuple corresponds to the x and y values of
+			# the 8x8 board with indeces starting at 0, i.e. A1 = (0,0), C5 = (2,4), etc.
+			for i in range(8):
+				# Store x- and y-coords of clicked square
+				if pg.mouse.get_pos()[0] >= (100+i*50) and pg.mouse.get_pos()[0] < (150+i*50):
+					sq_coord[0] = i
+				if pg.mouse.get_pos()[1] >= (100+i*50) and pg.mouse.get_pos()[1] < (150+i*50):
+					sq_coord[1] = i
+				# Use x-coord of 9 as indicator that click is out of bounds
+				if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
+				pg.mouse.get_pos()[1] >= 500 or pg.mouse.get_pos()[1] < 100:
+					sq_coord[0] = 9
+		if e.type == QUIT:
 			terminate()
-		if event.type == KEYDOWN:
+		if e.type == KEYDOWN:
 			pass
-		if event.type == KEYUP:
-			if event.key == K_ESCAPE or event.key == K_q:
+		if e.type == KEYUP:
+			if e.key == K_ESCAPE or e.key == K_q:
 				terminate()
 
 	pg.display.update()
