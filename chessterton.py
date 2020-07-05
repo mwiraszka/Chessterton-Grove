@@ -13,6 +13,8 @@
 # 28.06.20 numpy arrays for keeping track of what is on each square
 # 03.07.20 all variables rewritten as 'game state' class attributes
 # 05.07.20 redefine sq_sel variable w.r.t. mouse click position variable
+# 05.07.20 add all square-select/move piece variables to GameState class
+
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -63,52 +65,55 @@ class GameState():
 			['ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee'],
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']]
-		self.whiteToMove = True
-		self.moveLog = []
+		self.white_to_move = True
+		self.move_log = []
+		self.sq_from = [9,0] # (9,0) indicates out of bounds/ no selection
+		self.sq_to = []
+	def highlight_sq(self, sq):
+	# Draw square by connecting the four dots
+		pg.draw.lines(win, RED, True, [
+			(100+sq[0]*50,100+sq[1]*50),\
+			(150+sq[0]*50,100+sq[1]*50),\
+			(150+sq[0]*50,150+sq[1]*50),\
+			(100+sq[0]*50,150+sq[1]*50)], 3)
 
-def draw_game_state(screen, gs):
-	draw_board(screen)
-	draw_pieces(screen, gs.board)
 
 
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
 	i = 0
-	pcs = ['bQ', 'bK', 'bR', 'bN', 'bB','bP', 'wQ', 'wK', 'wR', 'wN', 'wB', 'wP']
-	for pc in pcs:
-		PC_IMG[pc] = sheet.subsurface(i*50,0,50,50)
+	pieces = [
+		'bQ', 'bK', 'bR', 'bN', 'bB','bP',
+		'wQ', 'wK', 'wR', 'wN', 'wB', 'wP'
+		]
+	for piece in pieces:
+		PC_IMG[piece] = sheet.subsurface(i*50,0,50,50)
 		i += 1
 
-def draw_board(screen):
+def draw_game_state(screen, board):
 	pg.draw.rect(screen, BROWN, (80,80,440,440))
-	for row in range(8):
-		for col in range(8):
-			if (row+col)%2 == 1:
+	# Draw board
+	for i in range(8):
+		for j in range(8):
+			if (i+j) % 2 == 1:
 				pg.draw.rect(screen, B_SQ,\
-					(100+col*SQ_SIZE, 100+row*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+					(100 + j*SQ_SIZE, 100 + i*SQ_SIZE, SQ_SIZE, SQ_SIZE))
 			else:
 				pg.draw.rect(screen, W_SQ,\
-					(100+col*SQ_SIZE, 100+row*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+					(100 + j*SQ_SIZE, 100 + i*SQ_SIZE, SQ_SIZE, SQ_SIZE))
 	for i in range(8):
 		# Draw digits 1-8 along side
-		text_surface = coord_font.render(('{}'.format(i+1)), False, BLACK)
-		screen.blit(text_surface, (88,468-50*i))
-		# Draw letters A-H (ASCII characters 65-72)
-		text_surface = coord_font.render(('{}'.format(chr(65+i))), False, BLACK)
-		screen.blit(text_surface, (122+50*i,504))
-
-def draw_pieces(screen, board):
- 	for row in range(8):
- 		for col in range(8):
- 			piece = board[row][col]
+		digits = coord_font.render(('{}'.format(i+1)), False, BLACK)
+		screen.blit(digits, (88, 468 - 50*i))
+		# Draw letters A-H (ASCII characters 65-72) along bottom
+		letters = coord_font.render(('{}'.format(chr(65+i))), False, BLACK)
+		screen.blit(letters, (122 + 50*i, 504))
+	# Draw pieces
+	for i in range(8):
+ 		for j in range(8):
+ 			piece = board[i][j]
  			if piece != 'ee':
- 				screen.blit(PC_IMG[piece], (100+col*SQ_SIZE, 100+row*SQ_SIZE))
-
-def highlight_sq(sq):
-	# Draw square by connecting the four dots
-	pg.draw.lines(win, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
-		(150+sq[0]*50,100+sq[1]*50),(150+sq[0]*50,150+sq[1]*50),\
-		(100+sq[0]*50,150+sq[1]*50)], 3)
+ 				screen.blit(PC_IMG[piece], (100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
 def terminate():
 	pg.quit()
@@ -117,18 +122,17 @@ def terminate():
 
 
 
-def main():
-	
 
+def main():
 	gs = GameState()
 	load_images()
 	sq_sel = [9,0]
 
 	while True:
 		win.fill(GREEN)
-		draw_game_state(win, gs)
-		if sq_sel[0] < 9:
-			highlight_sq(sq_sel)
+		draw_game_state(win, gs.board)
+		if gs.sq_from[0] < 9:
+			gs.highlight_sq(gs.sq_from)
 		
 		event = pg.event.get()
 		for e in event:
@@ -136,10 +140,10 @@ def main():
 				if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
 					pg.mouse.get_pos()[1] >= 500 or pg.mouse.get_pos()[1] < 100:
 					# use x-coord = 9 as indicator that click is out of bounds
-					sq_sel[0] = 9
+					gs.sq_from[0] = 9
 				else:
-					sq_sel[0] = (pg.mouse.get_pos()[0]-100) // SQ_SIZE
-					sq_sel[1] = (pg.mouse.get_pos()[1]-100) // SQ_SIZE
+					gs.sq_from[0] = (pg.mouse.get_pos()[0]-100) // SQ_SIZE
+					gs.sq_from[1] = (pg.mouse.get_pos()[1]-100) // SQ_SIZE
 
 			if e.type == QUIT:
 				terminate()
