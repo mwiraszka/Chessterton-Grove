@@ -12,6 +12,7 @@
 # 26.06.20 (code cleaned up)
 # 28.06.20 numpy arrays for keeping track of what is on each square
 # 03.07.20 all variables rewritten as 'game state' class attributes
+# 05.07.20 redefine sq_sel variable w.r.t. mouse click position variable
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -121,29 +122,25 @@ def main():
 
 	gs = GameState()
 	load_images()
-	sq_sel_coord = [9,0]
+	sq_sel = [9,0]
 
 	while True:
 		win.fill(GREEN)
 		draw_game_state(win, gs)
-		if sq_sel_coord[0] < 9:
-			highlight_sq(sq_sel_coord)
+		if sq_sel[0] < 9:
+			highlight_sq(sq_sel)
 		
 		event = pg.event.get()
 		for e in event:
 			if e.type == pg.MOUSEBUTTONUP:
-				for i in range(8):
-					# Store x- and y-coords of clicked square, indeces starting at 0
-					if pg.mouse.get_pos()[0] >= (100+i*SQ_SIZE) and\
-					pg.mouse.get_pos()[0] < (150+i*SQ_SIZE):
-						sq_sel_coord[0] = i
-					if pg.mouse.get_pos()[1] >= (100+i*SQ_SIZE) and\
-					pg.mouse.get_pos()[1] < (150+i*SQ_SIZE):
-						sq_sel_coord[1] = i
-					# Click is out of bounds (use x = 9 as an indicator)
-					if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
+				if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
 					pg.mouse.get_pos()[1] >= 500 or pg.mouse.get_pos()[1] < 100:
-						sq_sel_coord[0] = 9
+					# use x-coord = 9 as indicator that click is out of bounds
+					sq_sel[0] = 9
+				else:
+					sq_sel[0] = (pg.mouse.get_pos()[0]-100) // SQ_SIZE
+					sq_sel[1] = (pg.mouse.get_pos()[1]-100) // SQ_SIZE
+
 			if e.type == QUIT:
 				terminate()
 			if e.type == KEYDOWN:
