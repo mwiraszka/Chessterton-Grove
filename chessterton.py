@@ -14,7 +14,7 @@
 # 03.07.20 all variables rewritten as 'game state' class attributes
 # 05.07.20 redefine sq_sel variable w.r.t. mouse click position variable
 # 05.07.20 add all square-select/move piece variables to GameState class
-
+# 06.07.20 combine sq_from & sq_to to sq_move list; move a piece
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -41,7 +41,7 @@ RED = (220,20,20)
 BROWN = (139,69,19)
 YELLOW = (200,200,0)
 GREEN = (14,80,14)
-PC_IMG = {}
+PIECE_IMGS = {}
 
 # ---PYGAME SETUP---
 pg.init()
@@ -67,15 +67,11 @@ class GameState():
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']]
 		self.white_to_move = True
 		self.move_log = []
-		self.sq_from = [9,0] # (9,0) indicates out of bounds/ no selection
-		self.sq_to = []
-	def highlight_sq(self, sq):
-	# Draw square by connecting the four dots
-		pg.draw.lines(win, RED, True, [
-			(100+sq[0]*50,100+sq[1]*50),\
-			(150+sq[0]*50,100+sq[1]*50),\
-			(150+sq[0]*50,150+sq[1]*50),\
-			(100+sq[0]*50,150+sq[1]*50)], 3)
+		self.sq_move = [] # [from-x, from-y, to-x, to-y]
+	def move_piece(self, sq):
+		self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
+		self.board[sq[1]][sq[0]] = 'ee'
+		self.sq_move = []
 
 
 
@@ -87,12 +83,11 @@ def load_images():
 		'wQ', 'wK', 'wR', 'wN', 'wB', 'wP'
 		]
 	for piece in pieces:
-		PC_IMG[piece] = sheet.subsurface(i*50,0,50,50)
+		PIECE_IMGS[piece] = sheet.subsurface(i*50,0,50,50)
 		i += 1
 
-def draw_game_state(screen, board):
+def draw_board(screen):
 	pg.draw.rect(screen, BROWN, (80,80,440,440))
-	# Draw board
 	for i in range(8):
 		for j in range(8):
 			if (i+j) % 2 == 1:
@@ -108,12 +103,21 @@ def draw_game_state(screen, board):
 		# Draw letters A-H (ASCII characters 65-72) along bottom
 		letters = coord_font.render(('{}'.format(chr(65+i))), False, BLACK)
 		screen.blit(letters, (122 + 50*i, 504))
-	# Draw pieces
+
+def draw_pieces(screen, board):
 	for i in range(8):
  		for j in range(8):
- 			piece = board[i][j]
- 			if piece != 'ee':
- 				screen.blit(PC_IMG[piece], (100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
+ 			p = board[i][j]
+ 			if p != 'ee':
+ 				screen.blit(PIECE_IMGS[p], (100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
+
+def highlight_sq(screen, sq):
+		# Draw square by connecting the four dots
+		pg.draw.lines(win, RED, True, [
+			(100+sq[0]*50,100+sq[1]*50),\
+			(150+sq[0]*50,100+sq[1]*50),\
+			(150+sq[0]*50,150+sq[1]*50),\
+			(100+sq[0]*50,150+sq[1]*50)], 3)
 
 def terminate():
 	pg.quit()
@@ -126,25 +130,30 @@ def terminate():
 def main():
 	gs = GameState()
 	load_images()
-	sq_sel = [9,0]
-
+	clk = ()
 	while True:
 		win.fill(GREEN)
-		draw_game_state(win, gs.board)
-		if gs.sq_from[0] < 9:
-			gs.highlight_sq(gs.sq_from)
-		
+		draw_board(win)
+		draw_pieces(win, gs.board)
+		if clk:
+			if clk[0] < 100 or clk[0] >= 500 or clk[1] < 100 or clk[1] >= 500:
+				gs.sq_move = [] # Click is out of bounds: reset list
+			elif len(gs.sq_move) < 4:
+				gs.sq_move.append((clk[0]-100) // SQ_SIZE)
+				gs.sq_move.append((clk[1]-100) // SQ_SIZE)
+				if len(gs.sq_move) > 2 and (gs.sq_move[0] == gs.sq_move[2])\
+						and (gs.sq_move[1] == gs.sq_move[3]):
+					# 'From' and 'To' squares are the same: truncate list
+					del gs.sq_move[2:]
+				highlight_sq(win, gs.sq_move)
+			else:
+				gs.move_piece(gs.sq_move)
+				clk = (0,0)
+
 		event = pg.event.get()
 		for e in event:
-			if e.type == pg.MOUSEBUTTONUP:
-				if pg.mouse.get_pos()[0] >= 500 or pg.mouse.get_pos()[0] < 100 or\
-					pg.mouse.get_pos()[1] >= 500 or pg.mouse.get_pos()[1] < 100:
-					# use x-coord = 9 as indicator that click is out of bounds
-					gs.sq_from[0] = 9
-				else:
-					gs.sq_from[0] = (pg.mouse.get_pos()[0]-100) // SQ_SIZE
-					gs.sq_from[1] = (pg.mouse.get_pos()[1]-100) // SQ_SIZE
-
+			if e.type == MOUSEBUTTONUP:
+				clk = e.pos
 			if e.type == QUIT:
 				terminate()
 			if e.type == KEYDOWN:
