@@ -15,6 +15,7 @@
 # 05.07.20 redefine sq_sel variable w.r.t. mouse click position variable
 # 05.07.20 add all square-select/move piece variables to GameState class
 # 06.07.20 combine sq_from & sq_to to sq_move list; move a piece
+# 07.07.20 notation conversion function
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -41,7 +42,7 @@ RED = (220,20,20)
 BROWN = (139,69,19)
 YELLOW = (200,200,0)
 GREEN = (14,80,14)
-PIECE_IMGS = {}
+PIECE_IMg = {}
 
 # ---PYGAME SETUP---
 pg.init()
@@ -54,39 +55,45 @@ coord_font = pg.font.SysFont('helvetica', 18, False, False)
 
 
 # ---MAIN CLASS CONTAINING ALL OF GAME'S CURRENT STATE INFORMATION---
-class GameState():
+class ChessGame():
 	def __init__(self):
 		self.board = [
 			['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
 			['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-			['ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee'],
-			['ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee'],
-			['ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee'],
-			['ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee', 'ee'],
+			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
+			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
+			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
+			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']]
-		self.white_to_move = True
 		self.move_log = []
+		self.white_to_move = True
 		self.sq_move = [] # [from-x, from-y, to-x, to-y]
+
 	def move_piece(self, sq):
 		self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
-		self.board[sq[1]][sq[0]] = 'ee'
+		self.board[sq[1]][sq[0]] = '  '
 		self.sq_move = []
+
+	def cr_to_fr_notation(sq):
+		f = chr(97+int(sq[0]))
+		r = sq[i] 
+		return f + r
+
+	def fr_to_cr_notation(sq):
+		return 1
 
 
 
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
-	i = 0
-	pieces = [
-		'bQ', 'bK', 'bR', 'bN', 'bB','bP',
-		'wQ', 'wK', 'wR', 'wN', 'wB', 'wP'
-		]
-	for piece in pieces:
-		PIECE_IMGS[piece] = sheet.subsurface(i*50,0,50,50)
-		i += 1
+	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB','bP',
+			  'wQ', 'wK', 'wR', 'wN', 'wB', 'wP'
+			 ]
+	for i in range(len(pieces)):
+		PIECE_IMg[pieces[i]] = sheet.subsurface(i*50,0,50,50)
 
-def draw_board(screen):
+def draw_chessboard(screen):
 	pg.draw.rect(screen, BROWN, (80,80,440,440))
 	for i in range(8):
 		for j in range(8):
@@ -105,19 +112,15 @@ def draw_board(screen):
 		screen.blit(letters, (122 + 50*i, 504))
 
 def draw_pieces(screen, board):
-	for i in range(8):
- 		for j in range(8):
- 			p = board[i][j]
- 			if p != 'ee':
- 				screen.blit(PIECE_IMGS[p], (100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
+	pc = board[i][j] for i in range(8) for j in range(8) if board[i][j] != '  '
+ 	screen.blit(PIECE_IMg[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
-def highlight_sq(screen, sq):
-		# Draw square by connecting the four dots
-		pg.draw.lines(win, RED, True, [
-			(100+sq[0]*50,100+sq[1]*50),\
-			(150+sq[0]*50,100+sq[1]*50),\
-			(150+sq[0]*50,150+sq[1]*50),\
-			(100+sq[0]*50,150+sq[1]*50)], 3)
+def highlight_sq(win, sq):
+	# Draw square by connecting the four points
+	pg.draw.lines(screen, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
+								      (150+sq[0]*50,100+sq[1]*50),\
+								      (150+sq[0]*50,150+sq[1]*50),\
+								      (100+sq[0]*50,150+sq[1]*50)], 3)
 
 def terminate():
 	pg.quit()
@@ -128,31 +131,31 @@ def terminate():
 
 
 def main():
-	gs = GameState()
+	g = ChessGame()
 	load_images()
 	clk = ()
 	while True:
 		win.fill(GREEN)
-		draw_board(win)
-		draw_pieces(win, gs.board)
+		draw_chessboard(win)
+		draw_pieces(win, g.board)
 		if clk:
 			if clk[0] < 100 or clk[0] >= 500 or clk[1] < 100 or clk[1] >= 500:
-				gs.sq_move = [] # Click is out of bounds: reset list
-			elif len(gs.sq_move) < 4:
-				gs.sq_move.append((clk[0]-100) // SQ_SIZE)
-				gs.sq_move.append((clk[1]-100) // SQ_SIZE)
-				if len(gs.sq_move) > 2 and (gs.sq_move[0] == gs.sq_move[2])\
-						and (gs.sq_move[1] == gs.sq_move[3]):
+				g.sq_move = [] # Click is out of bounds: reset list
+			elif len(g.sq_move) < 4:
+				g.sq_move.append((clk[0]-100) // SQ_SIZE)
+				g.sq_move.append((clk[1]-100) // SQ_SIZE)
+				if len(g.sq_move) > 2 and (g.sq_move[0] == g.sq_move[2])\
+						and (g.sq_move[1] == g.sq_move[3]):
 					# 'From' and 'To' squares are the same: truncate list
-					del gs.sq_move[2:]
-				highlight_sq(win, gs.sq_move)
+					del g.sq_move[2:]
+				highlight_sq(win, g.sq_move)
 			else:
-				gs.move_piece(gs.sq_move)
+				g.move_piece(g.sq_move)
 				clk = (0,0)
 
 		event = pg.event.get()
 		for e in event:
-			if e.type == MOUSEBUTTONUP:
+			if e.type == MOUSEBUTTONDOWN:
 				clk = e.pos
 			if e.type == QUIT:
 				terminate()
