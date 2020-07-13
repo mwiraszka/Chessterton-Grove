@@ -16,6 +16,7 @@
 # 05.07.20 add all square-select/move piece variables to GameState class
 # 06.07.20 combine sq_from & sq_to to sq_move list; move a piece
 # 07.07.20 notation conversion function
+# 12.07.20 notation conversion function, cont'd
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -68,20 +69,19 @@ class ChessGame():
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']]
 		self.move_log = []
 		self.white_to_move = True
-		self.sq_move = [] # [from-x, from-y, to-x, to-y]
+		self.sq_move = [] # [from-x, from-y, to-x, to-y] (integers)
 
 	def move_piece(self, sq):
+		piece = self.board[sq[1]][sq[0]]
+		sq_from = cr_fr([sq[0],sq[1]])
+		sq_to = cr_fr([sq[2],sq[3]])
 		self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
 		self.board[sq[1]][sq[0]] = '  '
+		print (piece[1] + ' at ' + sq_from + ' has been moved to ' + sq_to + '.')
 		self.sq_move = []
+		
 
-	def cr_to_fr_notation(sq):
-		f = chr(97+int(sq[0]))
-		r = sq[i] 
-		return f + r
-
-	def fr_to_cr_notation(sq):
-		return 1
+	
 
 
 
@@ -112,15 +112,32 @@ def draw_chessboard(screen):
 		screen.blit(letters, (122 + 50*i, 504))
 
 def draw_pieces(screen, board):
-	pc = board[i][j] for i in range(8) for j in range(8) if board[i][j] != '  '
- 	screen.blit(PIECE_IMg[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
+	for i in range(8):
+		for j in range(8):
+			if board[i][j] != '  ':
+				pc = board[i][j]
+				screen.blit(PIECE_IMg[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
-def highlight_sq(win, sq):
+def highlight_sq(screen, sq):
 	# Draw square by connecting the four points
 	pg.draw.lines(screen, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
 								      (150+sq[0]*50,100+sq[1]*50),\
 								      (150+sq[0]*50,150+sq[1]*50),\
 								      (100+sq[0]*50,150+sq[1]*50)], 3)
+def cr_fr(cr):
+	# convert column-row notation to file-rank notation
+	# expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
+	# returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
+	fr = chr(97 + cr[0]) + str(8 - cr[1])
+	return (fr)
+
+def fr_cr(fr):
+	# convert file-rank notation to column-row notation
+	# expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
+	# returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
+	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
+	return cr
+
 
 def terminate():
 	pg.quit()
