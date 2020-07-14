@@ -19,6 +19,7 @@
 # 12.07.20 notation conversion function, cont'd
 # 13.07.20 pawn moves off 2nd rank - trial
 # 14.07.20 'check_move_validity' & re-incorporate numpy array for board
+# 14.07.20 white pawn moves, cont'd; 'b' to print board
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -73,30 +74,32 @@ class GameState():
 
 
 def check_move_validity(board, move):
-	move_from = move[:2]
-	move_to = move[3:4]
-	piece = board[move_from[1], move_from[0]]
+	from_x = move[0]
+	from_y = move[1]
+	to_x = move[2]
+	to_y = move[3]
+	piece = board[from_y, from_x]
 
-	# Convert squares to algebraic notation ('a1'..'h8')
-	sq_from = cr_fr([move_from[1], move_from[0]])
-	sq_to = cr_fr([move_to[1], move_to[0]])
-
+	valid = False
+	
 	# Pawn move
 	if piece == 'wP':
-		if (move_from[0] == move_to[0]) and board[move_from[0] - 1] == '  ':
-			if move_to[0] == (move_from[0] - 1):
-				if move_from[0] > 1: # Starting on 6th rank or lower
-					return True
-			elif move_from[1] == 6:
-				# on 2nd rank:
-				return True
+		if from_x == to_x and board[from_y - 1, from_x] == '  ':
+			if to_y == (from_y - 1):
+				if from_y > 1:
+					valid = True
+			elif to_y == (from_y - 2) and from_y == 6 and\
+			board[(from_y - 2), from_x] == '  ':
+				valid = True
+	return valid
+
 
 def move_piece(board, move):
-	piece = self.board[msl[1], msl[0]]
-	self.board[msl[3], msl[2]] = self.board[msl[1], msl[0]]
-	self.board[msl[1], msl[0]] = '  '
-	print (piece[1] + ' at ' + cr_fr([msl[1], msl[0])) +\
-		   ' has been moved to ' + cr_fr([msl[3], msl[2])) + '.')
+	piece = board[move[1], move[0]]
+	board[move[3], move[2]] = board[move[1], move[0]]
+	board[move[1], move[0]] = '  '
+	print (piece[1] + ' at ' + cr_fr([move[1], move[0]]) +\
+		   ' has been moved to ' + cr_fr([move[3], move[2]]) + '.')
 
 
 def load_images():
@@ -183,10 +186,11 @@ def main():
 				highlight_sq(win, gs.move)
 			else:
 				move_valid = check_move_validity(gs.board, gs.move)
+				clk = (0,0)
 				if move_valid:
 					move_piece(gs.board, gs.move)
 					gs.move = []
-				clk = (0,0)
+					
 
 		event = pg.event.get()
 		for e in event:
@@ -197,6 +201,9 @@ def main():
 			if e.type == KEYDOWN:
 				pass
 			if e.type == KEYUP:
+				if e.key == K_b:
+					print(gs.board)
+					print('\n')
 				if e.key == K_ESCAPE or e.key == K_q:
 					terminate()
 
