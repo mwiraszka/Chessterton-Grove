@@ -17,6 +17,7 @@
 # 06.07.20 combine sq_from & sq_to to sq_move list; move a piece
 # 07.07.20 notation conversion function
 # 12.07.20 notation conversion function, cont'd
+# 13.07.20 pawn moves off 2nd rank - trial
 
 
 # Author: Michal Wiraszka June-July 2020
@@ -72,12 +73,24 @@ class ChessGame():
 		self.sq_move = [] # [from-x, from-y, to-x, to-y] (integers)
 
 	def move_piece(self, sq):
+		move_valid = False
 		piece = self.board[sq[1]][sq[0]]
 		sq_from = cr_fr([sq[0],sq[1]])
 		sq_to = cr_fr([sq[2],sq[3]])
-		self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
-		self.board[sq[1]][sq[0]] = '  '
-		print (piece[1] + ' at ' + sq_from + ' has been moved to ' + sq_to + '.')
+
+		if piece[1] == 'P':
+			if piece[0] == 'w':
+				if sq[0] == sq[2]:
+					if (sq[1] == 6):
+						# on 2nd rank:
+						move_valid = True
+						
+		
+		if move_valid:				
+			self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
+			self.board[sq[1]][sq[0]] = '  '
+			print (piece[1] + ' at ' + sq_from + ' has been moved to ' + sq_to + '.')
+
 		self.sq_move = []
 		
 
