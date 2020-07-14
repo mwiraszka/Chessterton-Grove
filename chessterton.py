@@ -18,12 +18,11 @@
 # 07.07.20 notation conversion function
 # 12.07.20 notation conversion function, cont'd
 # 13.07.20 pawn moves off 2nd rank - trial
+# 14.07.20 'check_move_validity' & re-incorporate numpy array for board
 
 
-# Author: Michal Wiraszka June-July 2020
-# Contributions, Influences, References:
-#	- Eddie Sharick's "Chess Engine in Python" Tutorial
-#	  for 'Game State' Class
+# Written by Michal Wiraszka in June-July 2020
+
 
 # ---IMPORTS---
 import sys
@@ -57,9 +56,9 @@ coord_font = pg.font.SysFont('helvetica', 18, False, False)
 
 
 # ---MAIN CLASS CONTAINING ALL OF GAME'S CURRENT STATE INFORMATION---
-class ChessGame():
+class GameState():
 	def __init__(self):
-		self.board = [
+		self.board = np.array([
 			['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
 			['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
 			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
@@ -67,35 +66,37 @@ class ChessGame():
 			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
 			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']]
+			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']])
 		self.move_log = []
 		self.white_to_move = True
-		self.sq_move = [] # [from-x, from-y, to-x, to-y] (integers)
+		self.move = [] # int list [from-x, from-y, to-x, to-y]
 
-	def move_piece(self, sq):
-		move_valid = False
-		piece = self.board[sq[1]][sq[0]]
-		sq_from = cr_fr([sq[0],sq[1]])
-		sq_to = cr_fr([sq[2],sq[3]])
 
-		if piece[1] == 'P':
-			if piece[0] == 'w':
-				if sq[0] == sq[2]:
-					if (sq[1] == 6):
-						# on 2nd rank:
-						move_valid = True
-						
-		
-		if move_valid:				
-			self.board[sq[3]][sq[2]] = self.board[sq[1]][sq[0]]
-			self.board[sq[1]][sq[0]] = '  '
-			print (piece[1] + ' at ' + sq_from + ' has been moved to ' + sq_to + '.')
+def check_move_validity(board, move):
+	move_from = move[:2]
+	move_to = move[3:4]
+	piece = board[move_from[1], move_from[0]]
 
-		self.sq_move = []
-		
+	# Convert squares to algebraic notation ('a1'..'h8')
+	sq_from = cr_fr([move_from[1], move_from[0]])
+	sq_to = cr_fr([move_to[1], move_to[0]])
 
-	
+	# Pawn move
+	if piece == 'wP':
+		if (move_from[0] == move_to[0]) and board[move_from[0] - 1] == '  ':
+			if move_to[0] == (move_from[0] - 1):
+				if move_from[0] > 1: # Starting on 6th rank or lower
+					return True
+			elif move_from[1] == 6:
+				# on 2nd rank:
+				return True
 
+def move_piece(board, move):
+	piece = self.board[msl[1], msl[0]]
+	self.board[msl[3], msl[2]] = self.board[msl[1], msl[0]]
+	self.board[msl[1], msl[0]] = '  '
+	print (piece[1] + ' at ' + cr_fr([msl[1], msl[0])) +\
+		   ' has been moved to ' + cr_fr([msl[3], msl[2])) + '.')
 
 
 def load_images():
@@ -138,16 +139,16 @@ def highlight_sq(screen, sq):
 								      (150+sq[0]*50,150+sq[1]*50),\
 								      (100+sq[0]*50,150+sq[1]*50)], 3)
 def cr_fr(cr):
-	# convert column-row notation to file-rank notation
-	# expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
-	# returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
+	# Convert column-row notation to file-rank notation
+	# Expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
+	# Returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
 	fr = chr(97 + cr[0]) + str(8 - cr[1])
 	return (fr)
 
 def fr_cr(fr):
-	# convert file-rank notation to column-row notation
-	# expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
-	# returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
+	# Convert file-rank notation to column-row notation
+	# Expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
+	# Returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
 	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
 	return cr
 
@@ -161,26 +162,30 @@ def terminate():
 
 
 def main():
-	g = ChessGame()
+	gs = GameState()
 	load_images()
 	clk = ()
+	move_valid = False
 	while True:
 		win.fill(GREEN)
 		draw_chessboard(win)
-		draw_pieces(win, g.board)
+		draw_pieces(win, gs.board)
 		if clk:
 			if clk[0] < 100 or clk[0] >= 500 or clk[1] < 100 or clk[1] >= 500:
-				g.sq_move = [] # Click is out of bounds: reset list
-			elif len(g.sq_move) < 4:
-				g.sq_move.append((clk[0]-100) // SQ_SIZE)
-				g.sq_move.append((clk[1]-100) // SQ_SIZE)
-				if len(g.sq_move) > 2 and (g.sq_move[0] == g.sq_move[2])\
-						and (g.sq_move[1] == g.sq_move[3]):
+				gs.move = [] # Click is out of bounds: reset list
+			elif len(gs.move) < 4:
+				gs.move.append((clk[0]-100) // SQ_SIZE)
+				gs.move.append((clk[1]-100) // SQ_SIZE)
+				if len(gs.move) > 2 and (gs.move[0] == gs.move[2])\
+						and (gs.move[1] == gs.move[3]):
 					# 'From' and 'To' squares are the same: truncate list
-					del g.sq_move[2:]
-				highlight_sq(win, g.sq_move)
+					del gs.move[2:]
+				highlight_sq(win, gs.move)
 			else:
-				g.move_piece(g.sq_move)
+				move_valid = check_move_validity(gs.board, gs.move)
+				if move_valid:
+					move_piece(gs.board, gs.move)
+					gs.move = []
 				clk = (0,0)
 
 		event = pg.event.get()
