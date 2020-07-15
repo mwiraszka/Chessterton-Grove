@@ -22,6 +22,7 @@
 # 14.07.20 white pawn moves, cont'd; 'b' to print board
 # 14.07.20 white pawn captures; change .turn instance attribute to str
 # 15.07.20 black pawn moves & captures; queening
+# 15.07.20 .move_log instance attribute - conception; knight moves
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -71,12 +72,22 @@ class GameState():
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
 			])
-		self.move_log = []
-		self.turn = 'w'
-		self.move = [] # int list [from-x, from-y, to-x, to-y]
+		
+		self.turn = 'w'		
+		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
+		
+		#move_log = {
+		#'ply_num': 14,
+		#'piece': 'wP',
+		#'from_x': 3,
+		#'from_y': 1,
+		#'to_x': 3,
+		#'to_y': 2,
+		#'capture': '  ',
+		#'check': False}
 
 
-def check_move_valid(move_log, board, move):
+def check_move_valid(board, move):
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -129,6 +140,10 @@ def check_move_valid(move_log, board, move):
 				False)
 			):
 		return True
+	elif piece.endswith('N') and (board[to_y, to_x])[0] != piece[0]:
+		if ((abs(from_x - to_x) == 2 and abs(from_y - to_y) == 1) or
+				(abs(from_x - to_x) == 1 and abs(from_y - to_y) == 2)):
+			return True
 	return False
 
 
@@ -234,7 +249,7 @@ def main():
 					del gs.move[2:]
 				highlight_sq(win, gs.move)
 			else:
-				move_valid = check_move_valid(gs.move_log, gs.board, gs.move)
+				move_valid = check_move_valid(gs.board, gs.move)
 				clk = (0,0)
 				if move_valid:
 					move_piece(gs.board, gs.move)
