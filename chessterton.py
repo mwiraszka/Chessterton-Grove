@@ -20,6 +20,7 @@
 # 13.07.20 pawn moves off 2nd rank - trial
 # 14.07.20 'check_move_validity' & re-incorporate numpy array for board
 # 14.07.20 white pawn moves, cont'd; 'b' to print board
+# 14.07.20 white pawn captures; change .turn instance attribute to str
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -67,31 +68,45 @@ class GameState():
 			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
 			['  ', '  ', '  ', '  ', '  ', '  ', '  ', '  '],
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']])
+			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
+			])
 		self.move_log = []
-		self.white_to_move = True
+		self.turn = 'w'
 		self.move = [] # int list [from-x, from-y, to-x, to-y]
 
 
-def check_move_validity(board, move):
+def check_move_valid(move_log, board, move):
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
 	to_y = move[3]
 	piece = board[from_y, from_x]
-
-	valid = False
 	
-	# Pawn move
 	if piece == 'wP':
-		if from_x == to_x and board[from_y - 1, from_x] == '  ':
-			if to_y == (from_y - 1):
-				if from_y > 1:
-					valid = True
-			elif to_y == (from_y - 2) and from_y == 6 and\
-			board[(from_y - 2), from_x] == '  ':
-				valid = True
-	return valid
+		if (
+		(
+				# one square forward
+				from_x == to_x and
+				from_y - to_y == 1 and
+				board[from_y-1, from_x] == '  ') or 
+		(
+				# two squares forward
+				from_x == to_x and
+				from_y - to_y == 2 and
+				from_y == 6 and
+				board[from_y-1, from_x] == '  ' and
+				board[from_y-2, from_x] == '  ') or
+		(
+				# capture
+				abs(to_x - from_x) == 1 and
+				from_y - to_y == 1 and
+				board[to_y, to_x].startswith('b')) or
+		(	
+				# capture en passant
+				False)
+		):
+			return True
+	return False
 
 
 def move_piece(board, move):
@@ -185,7 +200,7 @@ def main():
 					del gs.move[2:]
 				highlight_sq(win, gs.move)
 			else:
-				move_valid = check_move_validity(gs.board, gs.move)
+				move_valid = check_move_valid(gs.move_log, gs.board, gs.move)
 				clk = (0,0)
 				if move_valid:
 					move_piece(gs.board, gs.move)
