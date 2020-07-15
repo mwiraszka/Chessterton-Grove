@@ -21,6 +21,7 @@
 # 14.07.20 'check_move_validity' & re-incorporate numpy array for board
 # 14.07.20 white pawn moves, cont'd; 'b' to print board
 # 14.07.20 white pawn captures; change .turn instance attribute to str
+# 15.07.20 black pawn moves & captures; queening
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -82,39 +83,72 @@ def check_move_valid(move_log, board, move):
 	to_y = move[3]
 	piece = board[from_y, from_x]
 	
-	if piece == 'wP':
-		if (
-		(
+	if piece == 'wP' and (
+			(
 				# one square forward
 				from_x == to_x and
 				from_y - to_y == 1 and
-				board[from_y-1, from_x] == '  ') or 
-		(
+				board[to_y, to_x] == '  ') or 
+			(
 				# two squares forward
 				from_x == to_x and
 				from_y - to_y == 2 and
 				from_y == 6 and
-				board[from_y-1, from_x] == '  ' and
-				board[from_y-2, from_x] == '  ') or
-		(
+				board[to_y, to_x] == '  ' and
+				board[to_y + 1, to_x] == '  ') or
+			(
 				# capture
 				abs(to_x - from_x) == 1 and
 				from_y - to_y == 1 and
 				board[to_y, to_x].startswith('b')) or
-		(	
+			(	
 				# capture en passant
 				False)
-		):
-			return True
+			):
+		return True
+	elif piece == 'bP' and (
+			(
+				# one square forward
+				from_x == to_x and
+				to_y - from_y == 1 and
+				board[to_y, to_x] == '  ') or 
+			(
+				# two squares forward
+				from_x == to_x and
+				to_y - from_y == 2 and
+				from_y == 1 and
+				board[to_y, to_x] == '  ' and
+				board[to_y - 1, to_x] == '  ') or
+			(
+				# capture
+				abs(to_x - from_x) == 1 and
+				to_y - from_y == 1 and
+				board[to_y, to_x].startswith('w')) or
+			(	
+				# capture en passant
+				False)
+			):
+		return True
 	return False
 
 
 def move_piece(board, move):
-	piece = board[move[1], move[0]]
-	board[move[3], move[2]] = board[move[1], move[0]]
-	board[move[1], move[0]] = '  '
-	print (piece[1] + ' at ' + cr_fr([move[1], move[0]]) +\
-		   ' has been moved to ' + cr_fr([move[3], move[2]]) + '.')
+	from_x = move[0]
+	from_y = move[1]
+	to_x = move[2]
+	to_y = move[3]
+	piece = board[from_y, from_x]
+	
+	if piece == 'wP' and to_y == 0:
+		board[to_y, to_x] = 'wQ'
+	elif piece == 'bP' and to_y == 7:
+		board[to_y, to_x] = 'bQ'
+	else:
+		board[to_y, to_x] = board[from_y, from_x]
+	board[from_y, from_x] = '  '
+	
+	print (piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
+		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
 
 
 def load_images():
