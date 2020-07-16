@@ -23,6 +23,7 @@
 # 14.07.20 white pawn captures; change .turn instance attribute to str
 # 15.07.20 black pawn moves & captures; queening
 # 15.07.20 .move_log instance attribute - conception; knight moves
+# 16.07.20 bishop moves
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -92,59 +93,79 @@ def check_move_valid(board, move):
 	from_y = move[1]
 	to_x = move[2]
 	to_y = move[3]
+	x_dist = abs(from_x - to_x)
+	y_dist = abs(from_y - to_y)
 	piece = board[from_y, from_x]
 	
-	if piece == 'wP' and (
-			(
-				# one square forward
-				from_x == to_x and
-				from_y - to_y == 1 and
-				board[to_y, to_x] == '  ') or 
-			(
-				# two squares forward
-				from_x == to_x and
-				from_y - to_y == 2 and
-				from_y == 6 and
-				board[to_y, to_x] == '  ' and
-				board[to_y + 1, to_x] == '  ') or
-			(
-				# capture
-				abs(to_x - from_x) == 1 and
-				from_y - to_y == 1 and
-				board[to_y, to_x].startswith('b')) or
-			(	
-				# capture en passant
-				False)
-			):
-		return True
-	elif piece == 'bP' and (
-			(
-				# one square forward
-				from_x == to_x and
-				to_y - from_y == 1 and
-				board[to_y, to_x] == '  ') or 
-			(
-				# two squares forward
-				from_x == to_x and
-				to_y - from_y == 2 and
-				from_y == 1 and
-				board[to_y, to_x] == '  ' and
-				board[to_y - 1, to_x] == '  ') or
-			(
-				# capture
-				abs(to_x - from_x) == 1 and
-				to_y - from_y == 1 and
-				board[to_y, to_x].startswith('w')) or
-			(	
-				# capture en passant
-				False)
-			):
-		return True
-	elif piece.endswith('N') and (board[to_y, to_x])[0] != piece[0]:
-		if ((abs(from_x - to_x) == 2 and abs(from_y - to_y) == 1) or
-				(abs(from_x - to_x) == 1 and abs(from_y - to_y) == 2)):
+	if (board[to_y, to_x])[0] != piece[0]:
+		if piece == 'wP' and (
+				(
+					# one square forward
+					from_x == to_x and
+					from_y - to_y == 1 and
+					board[to_y, to_x] == '  ') or 
+				(
+					# two squares forward
+					from_x == to_x and
+					from_y - to_y == 2 and
+					from_y == 6 and
+					board[to_y, to_x] == '  ' and
+					board[to_y + 1, to_x] == '  ') or
+				(
+					# capture
+					x_dist == 1 and
+					from_y - to_y == 1 and
+					board[to_y, to_x].startswith('b')) or
+				(	
+					# capture en passant
+					False)
+				):
 			return True
-	return False
+		elif piece == 'bP' and (
+				(
+					# one square forward
+					from_x == to_x and
+					to_y - from_y == 1 and
+					board[to_y, to_x] == '  ') or 
+				(
+					# two squares forward
+					from_x == to_x and
+					to_y - from_y == 2 and
+					from_y == 1 and
+					board[to_y, to_x] == '  ' and
+					board[to_y - 1, to_x] == '  ') or
+				(
+					# capture
+					x_dist == 1 and
+					to_y - from_y == 1 and
+					board[to_y, to_x].startswith('w')) or
+				(	
+					# capture en passant
+					False)
+				):
+			return True
+		elif piece.endswith('N') and (
+				(x_dist == 2 and y_dist == 1) or
+				(x_dist == 1 and y_dist == 2)):
+			return True
+		elif piece.endswith('B') and x_dist == y_dist:
+			x_change = to_x - from_x
+			y_change = to_y - from_y
+			
+			# if x_change/y_change is a neg number, step direction must also be neg (i.e. -1)
+			x_steps_direction = 1
+			y_steps_direction = 1
+			if x_change < 0:
+				x_steps_direction = -1
+			if y_change < 0:
+				y_steps_direction = -1
+			for i in range(0, x_change, x_steps_direction):
+				for j in range(0, y_change, y_steps_direction):
+				# check for any obstacles along the way
+					if abs(i) == abs(j) and i != 0 and board[from_y + j, from_x + i] != '  ':
+							return False
+			return True
+		return False
 
 
 def move_piece(board, move):
@@ -163,7 +184,7 @@ def move_piece(board, move):
 	board[from_y, from_x] = '  '
 	
 	print (piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
-		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
+		   ' moved to ' + cr_fr([to_x, to_y]) + '.\n')
 
 
 def load_images():
