@@ -24,6 +24,7 @@
 # 15.07.20 black pawn moves & captures; queening
 # 15.07.20 .move_log instance attribute - conception; knight moves
 # 16.07.20 bishop moves
+# 16.07.20 rook moves; some absolute value calculations simplified
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -93,8 +94,10 @@ def check_move_valid(board, move):
 	from_y = move[1]
 	to_x = move[2]
 	to_y = move[3]
-	x_dist = abs(from_x - to_x)
-	y_dist = abs(from_y - to_y)
+	x_diff = to_x - from_x
+	y_diff = to_y - from_y
+	x_direction = -1 if x_diff < 0 else 1
+	y_direction = -1 if y_diff < 0 else 1
 	piece = board[from_y, from_x]
 	
 	if (board[to_y, to_x])[0] != piece[0]:
@@ -113,7 +116,7 @@ def check_move_valid(board, move):
 					board[to_y + 1, to_x] == '  ') or
 				(
 					# capture
-					x_dist == 1 and
+					abs(x_diff) == 1 and
 					from_y - to_y == 1 and
 					board[to_y, to_x].startswith('b')) or
 				(	
@@ -136,7 +139,7 @@ def check_move_valid(board, move):
 					board[to_y - 1, to_x] == '  ') or
 				(
 					# capture
-					x_dist == 1 and
+					abs(x_diff) == 1 and
 					to_y - from_y == 1 and
 					board[to_y, to_x].startswith('w')) or
 				(	
@@ -145,25 +148,27 @@ def check_move_valid(board, move):
 				):
 			return True
 		elif piece.endswith('N') and (
-				(x_dist == 2 and y_dist == 1) or
-				(x_dist == 1 and y_dist == 2)):
+				(abs(x_diff) == 2 and abs(y_diff) == 1) or
+				(abs(x_diff) == 1 and abs(y_diff) == 2)):
 			return True
-		elif piece.endswith('B') and x_dist == y_dist:
-			x_change = to_x - from_x
-			y_change = to_y - from_y
-			
-			# if x_change/y_change is a neg number, step direction must also be neg (i.e. -1)
-			x_steps_direction = 1
-			y_steps_direction = 1
-			if x_change < 0:
-				x_steps_direction = -1
-			if y_change < 0:
-				y_steps_direction = -1
-			for i in range(0, x_change, x_steps_direction):
-				for j in range(0, y_change, y_steps_direction):
-				# check for any obstacles along the way
-					if abs(i) == abs(j) and i != 0 and board[from_y + j, from_x + i] != '  ':
-							return False
+		elif piece.endswith('B') and abs(x_diff) == abs(y_diff):
+			# check for any pieces along the way
+			# if x_diff or y_diff is neg, step direction = -1, and start index
+			# also set to -1 (i.e. don't check origin square at index 0)
+			for i in range(x_direction, x_diff, x_direction):
+				for j in range(y_direction, y_diff, y_direction):
+					if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
+						return False
+			return True
+		elif piece.endswith('R') and (x_diff == 0 or y_diff == 0):
+			if x_diff != 0:
+				for i in range(x_direction, x_diff, x_direction):
+					if board[from_y, from_x+i] != '  ':
+						return False
+			else:
+				for i in range(y_direction, y_diff, y_direction):
+					if board[from_y+i, from_x] != '  ':
+						return False
 			return True
 		return False
 
