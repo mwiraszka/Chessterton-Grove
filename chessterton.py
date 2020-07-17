@@ -25,6 +25,7 @@
 # 15.07.20 .move_log instance attribute - conception; knight moves
 # 16.07.20 bishop moves
 # 16.07.20 rook moves; some absolute value calculations simplified
+# 17.07.20 king and queen moves
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -152,24 +153,49 @@ def check_move_valid(board, move):
 				(abs(x_diff) == 1 and abs(y_diff) == 2)):
 			return True
 		elif piece.endswith('B') and abs(x_diff) == abs(y_diff):
-			# check for any pieces along the way
-			# if x_diff or y_diff is neg, step direction = -1, and start index
+			# Check for any pieces along the way;
+			# If x_diff or y_diff is neg, step direction = -1, and start index
 			# also set to -1 (i.e. don't check origin square at index 0)
 			for i in range(x_direction, x_diff, x_direction):
 				for j in range(y_direction, y_diff, y_direction):
 					if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
 						return False
 			return True
-		elif piece.endswith('R') and (x_diff == 0 or y_diff == 0):
-			if x_diff != 0:
+		elif piece.endswith('R'):
+			if y_diff == 0:
 				for i in range(x_direction, x_diff, x_direction):
 					if board[from_y, from_x+i] != '  ':
 						return False
-			else:
+			elif x_diff == 0:
 				for i in range(y_direction, y_diff, y_direction):
 					if board[from_y+i, from_x] != '  ':
 						return False
+			else:
+				return False
 			return True
+		elif piece.endswith('Q'):
+			# Check for any pieces along the way, for the three cases:
+			# horizontal move (y_diff is 0), vertical move (x_diff is 0),
+			# and diagonal move (absolute values of x_diff & y_diff are equal) 
+			if y_diff == 0:
+				for i in range(x_direction, x_diff, x_direction):
+					if board[from_y, from_x+i] != '  ':
+						return False
+			elif x_diff == 0:
+				for i in range(y_direction, y_diff, y_direction):
+					if board[from_y+i, from_x] != '  ':
+						return False
+			elif abs(x_diff) == abs(y_diff):
+				for i in range(x_direction, x_diff, x_direction):
+					for j in range(y_direction, y_diff, y_direction):
+						if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
+							return False
+			else:
+				return False
+			return True
+		elif piece.endswith('K') and abs(y_diff) < 2 and abs(x_diff) < 2:
+			return True
+		# None of the above conditions met:
 		return False
 
 
@@ -188,8 +214,12 @@ def move_piece(board, move):
 		board[to_y, to_x] = board[from_y, from_x]
 	board[from_y, from_x] = '  '
 	
-	print (piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
-		   ' moved to ' + cr_fr([to_x, to_y]) + '.\n')
+	if piece[0] == 'w':
+		colour = 'White '
+	else:
+		colour = 'Black '
+	print (colour + piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
+		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
 
 
 def load_images():
@@ -292,8 +322,7 @@ def main():
 				pass
 			if e.type == KEYUP:
 				if e.key == K_b:
-					print(gs.board)
-					print('\n')
+					print('\n' + str(gs.board) + '\n')
 				if e.key == K_ESCAPE or e.key == K_q:
 					terminate()
 
