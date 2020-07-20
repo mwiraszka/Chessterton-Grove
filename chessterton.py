@@ -28,6 +28,7 @@
 # 17.07.20 king and queen moves
 # 20.07.20 glitch in highlighting square fixed
 # 20.07.20 white and black to move in turn
+# 20.07.20 scream at user if king is in check - rough trial
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -81,7 +82,7 @@ class GameState():
 		
 		self.turn = 'w'		
 		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
-		
+		self.in_check = False
 		#move_log = {
 		#'ply_num': 14,
 		#'piece': 'wP',
@@ -205,6 +206,32 @@ def check_move_valid(board, move, turn):
 		# None of the above conditions met:
 		return False
 
+def check_if_in_check(board, turn):
+	white_king = np.where(board == 'wK')
+	black_king = np.where(board == 'bK')
+	is_in_check = False
+	if turn == 'w':
+		# Check if white king is currently in check
+		for i in range(8):
+			for j in range(8):
+				if board[i, j][0] == 'b':
+					# Test all possible black piece moves onto white king's square
+					move = [j, i, int(white_king[1]), int(white_king[0])]
+					is_in_check = check_move_valid(board, move, 'b')
+					if is_in_check:
+						return is_in_check
+	else:
+		# Check if black king is currently in check
+		for i in range(8):
+			for j in range(8):
+				if board[i, j][0] == 'w':
+					# Test all possible white piece moves onto black king's square
+					move = [j, i, int(black_king[1]), int(black_king[0])]
+					is_in_check = check_move_valid(board, move, 'w')
+					if is_in_check:
+						return is_in_check
+	return False
+
 
 def move_piece(board, move):
 	from_x = move[0]
@@ -222,7 +249,7 @@ def move_piece(board, move):
 		board[to_y, to_x] = board[from_y, from_x]
 	board[from_y, from_x] = '  '
 	
-	print (piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
+	print(piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
 		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
 
 def swap_colours(turn):
@@ -290,13 +317,9 @@ def fr_cr(fr):
 	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
 	return cr
 
-
 def terminate():
 	pg.quit()
 	sys.exit()
-
-
-
 
 
 def main():
@@ -319,6 +342,11 @@ def main():
 					if move_valid:
 						move_piece(gs.board, gs.move)
 						gs.move = []
+						gs.in_check = check_if_in_check(gs.board, gs.turn)
+						if gs.turn == 'w' and gs.in_check:
+							print('WHITE IS IN CHECK!')
+						elif gs.turn == 'b' and gs.in_check:
+							print('BLACK IS IN CHECK!')
 						gs.turn = swap_colours(gs.turn)
 					else:
 						# Use the 2nd selected square as new 'From' square
@@ -328,6 +356,10 @@ def main():
 			clk = ()
 		if len(gs.move) == 2:
 			highlight_sq(win, gs.move, gs.turn)		
+
+
+		
+
 
 		event = pg.event.get()
 		for e in event:
