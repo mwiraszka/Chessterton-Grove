@@ -27,6 +27,7 @@
 # 16.07.20 rook moves; some absolute value calculations simplified
 # 17.07.20 king and queen moves
 # 20.07.20 glitch in highlighting square fixed
+# 20.07.20 white and black to move in turn
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -48,10 +49,11 @@ WHITE = (245,245,245)
 B_SQ = (80,70,60)
 W_SQ = (200,200,200)
 RED = (220,20,20)
+BLUE = (20,20,220)
 BROWN = (139,69,19)
 YELLOW = (200,200,0)
 GREEN = (14,80,14)
-PIECE_IMg = {}
+PIECE_IMG = {}
 
 # ---PYGAME SETUP---
 pg.init()
@@ -91,7 +93,7 @@ class GameState():
 		#'check': False}
 
 
-def check_move_valid(board, move):
+def check_move_valid(board, move, turn):
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -102,7 +104,11 @@ def check_move_valid(board, move):
 	y_direction = -1 if y_diff < 0 else 1
 	piece = board[from_y, from_x]
 	
-	if (board[to_y, to_x])[0] != piece[0]:
+
+	if (from_x == to_x and from_y == to_y) or turn != piece[0]:
+		#'To' and 'From' squares the same or not that colour's turn to move
+		return False
+	elif (board[to_y, to_x])[0] != piece[0]:
 		if piece == 'wP' and (
 				(
 					# one square forward
@@ -207,6 +213,7 @@ def move_piece(board, move):
 	to_y = move[3]
 	piece = board[from_y, from_x]
 	
+	# Pawn queening scenario, otherwise simply move the location of piece
 	if piece == 'wP' and to_y == 0:
 		board[to_y, to_x] = 'wQ'
 	elif piece == 'bP' and to_y == 7:
@@ -215,12 +222,15 @@ def move_piece(board, move):
 		board[to_y, to_x] = board[from_y, from_x]
 	board[from_y, from_x] = '  '
 	
-	if piece[0] == 'w':
-		colour = 'White '
-	else:
-		colour = 'Black '
-	print (colour + piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
+	print (piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
 		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
+
+def swap_colours(turn):
+	# Return which colour moves next
+	if turn == 'w':
+		return 'b'
+	else:
+		return 'w'
 
 
 def load_images():
@@ -229,7 +239,7 @@ def load_images():
 			  'wQ', 'wK', 'wR', 'wN', 'wB', 'wP'
 			 ]
 	for i in range(len(pieces)):
-		PIECE_IMg[pieces[i]] = sheet.subsurface(i*50,0,50,50)
+		PIECE_IMG[pieces[i]] = sheet.subsurface(i*50,0,50,50)
 
 def draw_chessboard(screen):
 	pg.draw.rect(screen, BROWN, (80,80,440,440))
@@ -254,14 +264,18 @@ def draw_pieces(screen, board):
 		for j in range(8):
 			if board[i][j] != '  ':
 				pc = board[i][j]
-				screen.blit(PIECE_IMg[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
+				screen.blit(PIECE_IMG[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
-def highlight_sq(screen, sq):
+def highlight_sq(screen, sq, turn):
 	# Draw red square with thickness = 3 by connecting the four points
-	pg.draw.lines(screen, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
-								      (150+sq[0]*50,100+sq[1]*50),\
-								      (150+sq[0]*50,150+sq[1]*50),\
-								      (100+sq[0]*50,150+sq[1]*50)], 3)
+	if turn == 'w':
+		turn_col = WHITE
+	else:
+		turn_col = BLACK
+	pg.draw.lines(screen, turn_col, True, [(100+sq[0]*50,100+sq[1]*50),\
+								      	   (150+sq[0]*50,100+sq[1]*50),\
+								           (150+sq[0]*50,150+sq[1]*50),\
+								           (100+sq[0]*50,150+sq[1]*50)], 3)
 def cr_fr(cr):
 	# Convert column-row notation to file-rank notation
 	# Expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
@@ -301,22 +315,19 @@ def main():
 				gs.move.append((clk[0]-100) // SQ_SIZE)
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
-					if gs.move[0] == gs.move[2] and gs.move[1] == gs.move[3]:
-					# 'From' and 'To' squares are the same: truncate list
-						del gs.move[2:]
+					move_valid = check_move_valid(gs.board, gs.move, gs.turn)
+					if move_valid:
+						move_piece(gs.board, gs.move)
+						gs.move = []
+						gs.turn = swap_colours(gs.turn)
 					else:
-						move_valid = check_move_valid(gs.board, gs.move)
-						if move_valid:
-							move_piece(gs.board, gs.move)
-							gs.move = []
-						else:
-							# Use the 2nd selected square as new 'From' square
-							gs.move[0] = gs.move[2]
-							gs.move[1] = gs.move[3]
-							del gs.move[2:]
+						# Use the 2nd selected square as new 'From' square
+						gs.move[0] = gs.move[2]
+						gs.move[1] = gs.move[3]
+						del gs.move[2:]
 			clk = ()
 		if len(gs.move) == 2:
-			highlight_sq(win, gs.move)		
+			highlight_sq(win, gs.move, gs.turn)		
 
 		event = pg.event.get()
 		for e in event:
