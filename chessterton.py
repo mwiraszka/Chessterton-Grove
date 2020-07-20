@@ -26,6 +26,7 @@
 # 16.07.20 bishop moves
 # 16.07.20 rook moves; some absolute value calculations simplified
 # 17.07.20 king and queen moves
+# 20.07.20 glitch in highlighting square fixed
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -256,7 +257,7 @@ def draw_pieces(screen, board):
 				screen.blit(PIECE_IMg[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
 def highlight_sq(screen, sq):
-	# Draw square by connecting the four points
+	# Draw red square with thickness = 3 by connecting the four points
 	pg.draw.lines(screen, RED, True, [(100+sq[0]*50,100+sq[1]*50),\
 								      (150+sq[0]*50,100+sq[1]*50),\
 								      (150+sq[0]*50,150+sq[1]*50),\
@@ -299,18 +300,23 @@ def main():
 			elif len(gs.move) < 4:
 				gs.move.append((clk[0]-100) // SQ_SIZE)
 				gs.move.append((clk[1]-100) // SQ_SIZE)
-				if len(gs.move) > 2 and (gs.move[0] == gs.move[2])\
-						and (gs.move[1] == gs.move[3]):
+				if len(gs.move) == 4:
+					if gs.move[0] == gs.move[2] and gs.move[1] == gs.move[3]:
 					# 'From' and 'To' squares are the same: truncate list
-					del gs.move[2:]
-				highlight_sq(win, gs.move)
-			else:
-				move_valid = check_move_valid(gs.board, gs.move)
-				clk = (0,0)
-				if move_valid:
-					move_piece(gs.board, gs.move)
-					gs.move = []
-					
+						del gs.move[2:]
+					else:
+						move_valid = check_move_valid(gs.board, gs.move)
+						if move_valid:
+							move_piece(gs.board, gs.move)
+							gs.move = []
+						else:
+							# Use the 2nd selected square as new 'From' square
+							gs.move[0] = gs.move[2]
+							gs.move[1] = gs.move[3]
+							del gs.move[2:]
+			clk = ()
+		if len(gs.move) == 2:
+			highlight_sq(win, gs.move)		
 
 		event = pg.event.get()
 		for e in event:
