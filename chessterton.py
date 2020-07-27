@@ -30,6 +30,7 @@
 # 20.07.20 white and black to move in turn
 # 20.07.20 scream at user if king is in check - rough trial
 # 26.07.20 defined a gs.move_log variable as a list of dicts
+# 27.07.20 en passant
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -85,11 +86,12 @@ class GameState():
 		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
 		self.in_check = False
 		
-		# list of dictionaries
-		self.move_log = []
+		# list of dictionaries; initialize with dummy variable so that check_move_valid
+		# function can be called, and so that ply count (list index) starts at 1
+		self.move_log = [0]
 
 
-def check_move_valid(board, move, turn):
+def check_move_valid(board, move, turn, move_log):
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -99,7 +101,6 @@ def check_move_valid(board, move, turn):
 	x_direction = -1 if x_diff < 0 else 1
 	y_direction = -1 if y_diff < 0 else 1
 	piece = board[from_y, from_x]
-	
 
 	if (from_x == to_x and from_y == to_y) or turn != piece[0]:
 		#'To' and 'From' squares the same or not that colour's turn to move
@@ -125,7 +126,13 @@ def check_move_valid(board, move, turn):
 					board[to_y, to_x].startswith('b')) or
 				(	
 					# capture en passant
-					False)
+					from_y == 3 and
+					to_y == 2 and
+					abs(x_diff) == 1 and
+					move_log[-1].get('piece') == 'bP' and
+					move_log[-1].get('from_y') == 1 and
+					move_log[-1].get('to_y') == 3 and
+					abs(move_log[-1].get('to_x') - from_x) == 1)
 				):
 			return True
 		elif piece == 'bP' and (
@@ -148,7 +155,13 @@ def check_move_valid(board, move, turn):
 					board[to_y, to_x].startswith('w')) or
 				(	
 					# capture en passant
-					False)
+					from_y == 4 and
+					to_y == 5 and
+					abs(x_diff) == 1 and
+					move_log[-1].get('piece') == 'wP' and
+					move_log[-1].get('from_y') == 6 and
+					move_log[-1].get('to_y') == 4 and
+					abs(move_log[-1].get('to_x') - from_x) == 1)
 				):
 			return True
 		elif piece.endswith('N') and (
@@ -201,7 +214,7 @@ def check_move_valid(board, move, turn):
 		# None of the above conditions met:
 		return False
 
-def check_if_in_check(board, turn):
+def check_if_in_check(board, turn, move_log):
 	white_king = np.where(board == 'wK')
 	black_king = np.where(board == 'bK')
 	is_in_check = False
@@ -212,7 +225,7 @@ def check_if_in_check(board, turn):
 				if board[i, j][0] == 'b':
 					# Test all possible black piece moves onto white king's square
 					move = [j, i, int(white_king[1]), int(white_king[0])]
-					is_in_check = check_move_valid(board, move, 'b')
+					is_in_check = check_move_valid(board, move, 'b', move_log)
 					if is_in_check:
 						return is_in_check
 	else:
@@ -222,7 +235,7 @@ def check_if_in_check(board, turn):
 				if board[i, j][0] == 'w':
 					# Test all possible white piece moves onto black king's square
 					move = [j, i, int(black_king[1]), int(black_king[0])]
-					is_in_check = check_move_valid(board, move, 'w')
+					is_in_check = check_move_valid(board, move, 'w', move_log)
 					if is_in_check:
 						return is_in_check
 	return False
@@ -246,7 +259,18 @@ def move_piece(board, move):
 		'check': False
 		}
 
-	# Pawn queening scenario, otherwise simply move the location of piece
+	# En passant scenario: register move as a special capture and
+	# manually remove the opponent's pawn
+	if piece.endswith('P') and\
+			abs(from_x - to_x) == 1 and board[to_y, to_x] == '  ':
+		move_info['capture'] = 'ep'
+		if to_y == 2:
+			board[to_y + 1, to_x] = '  '
+		else:
+			board[to_y - 1, to_x] = '  '
+
+	# Pawn queening scenario: change pawn to a queen;
+	# otherwise simply move that same piece to the new square
 	if piece == 'wP' and to_y == 0:
 		board[to_y, to_x] = 'wQ'
 	elif piece == 'bP' and to_y == 7:
@@ -255,6 +279,7 @@ def move_piece(board, move):
 		board[to_y, to_x] = board[from_y, from_x]
 	board[from_y, from_x] = '  '
 	
+
 	print(piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
 		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
 	
@@ -347,12 +372,14 @@ def main():
 				gs.move.append((clk[0]-100) // SQ_SIZE)
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
-					move_valid = check_move_valid(gs.board, gs.move, gs.turn)
+					move_valid = check_move_valid(
+							gs.board, gs.move, gs.turn, gs.move_log)
 					if move_valid:
 						move_info = move_piece(gs.board, gs.move)
 						gs.move_log.append(move_info)
 						gs.move = []
-						gs.in_check = check_if_in_check(gs.board, gs.turn)
+						gs.in_check = check_if_in_check(
+								gs.board, gs.turn, gs.move_log)
 						if gs.turn == 'w' and gs.in_check:
 							print('WHITE IS IN CHECK!')
 						elif gs.turn == 'b' and gs.in_check:
