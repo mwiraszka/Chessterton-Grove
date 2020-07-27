@@ -29,6 +29,7 @@
 # 20.07.20 glitch in highlighting square fixed
 # 20.07.20 white and black to move in turn
 # 20.07.20 scream at user if king is in check - rough trial
+# 26.07.20 defined a gs.move_log variable as a list of dicts
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -83,15 +84,9 @@ class GameState():
 		self.turn = 'w'		
 		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
 		self.in_check = False
-		#move_log = {
-		#'ply_num': 14,
-		#'piece': 'wP',
-		#'from_x': 3,
-		#'from_y': 1,
-		#'to_x': 3,
-		#'to_y': 2,
-		#'capture': '  ',
-		#'check': False}
+		
+		# list of dictionaries
+		self.move_log = []
 
 
 def check_move_valid(board, move, turn):
@@ -234,12 +229,23 @@ def check_if_in_check(board, turn):
 
 
 def move_piece(board, move):
+	# Returns move_info to later be appended to gs.move_log variable
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
 	to_y = move[3]
 	piece = board[from_y, from_x]
 	
+	move_info = {
+		'piece': piece,
+		'from_x': from_x,
+		'from_y': from_y,
+		'to_x': to_x,
+		'to_y': to_y,
+		'capture': board[to_y, to_x],
+		'check': False
+		}
+
 	# Pawn queening scenario, otherwise simply move the location of piece
 	if piece == 'wP' and to_y == 0:
 		board[to_y, to_x] = 'wQ'
@@ -251,6 +257,9 @@ def move_piece(board, move):
 	
 	print(piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
 		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
+	
+	return move_info
+
 
 def swap_colours(turn):
 	# Return which colour moves next
@@ -340,7 +349,8 @@ def main():
 				if len(gs.move) == 4:
 					move_valid = check_move_valid(gs.board, gs.move, gs.turn)
 					if move_valid:
-						move_piece(gs.board, gs.move)
+						move_info = move_piece(gs.board, gs.move)
+						gs.move_log.append(move_info)
 						gs.move = []
 						gs.in_check = check_if_in_check(gs.board, gs.turn)
 						if gs.turn == 'w' and gs.in_check:
@@ -371,7 +381,11 @@ def main():
 				pass
 			if e.type == KEYUP:
 				if e.key == K_b:
+					# display current board state in text
 					print('\n' + str(gs.board) + '\n')
+				if e.key == K_l:
+					# display move log list
+					print('\n' + str(gs.move_log) + '\n')
 				if e.key == K_ESCAPE or e.key == K_q:
 					terminate()
 
