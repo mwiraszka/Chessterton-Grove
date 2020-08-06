@@ -1,6 +1,16 @@
-# Chessterton Grove is an on-going practice project, with goals to
-# 1) make the most sophisticated chess platform possible, while
-# 2) documenting all progress for future reference.
+# CHESSTERTON GROVE
+# by Michal Wiraszka
+
+# Written fully in Python, making heavy use of its Pygame and Numpy modules.
+
+# What is 'Chessterton Grove'?
+# 'Chessterton Grove' is sophistication. 'Chessterton Grove' is poise.
+# 'Chessterton Grove', my friend, is all you've ever strived to be, just in
+# chess form. Now, while 'Chessterton Grove' exudes the grandiosity required
+# to allow itself to refer to itself in the third person, it is equally
+# humble to concede that Rome was not built in a day. In its current state,
+# 'Chessterton Grove' proudly supports all the functionality you would expect
+# from a chess game of this caliber (and more!) Just don't give any checks yet.
 
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
@@ -20,7 +30,7 @@
 # 13.07.20 pawn moves off 2nd rank - trial
 # 14.07.20 'check_move_validity' & re-incorporate numpy array for board
 # 14.07.20 white pawn moves, cont'd; 'b' to print board
-# 14.07.20 white pawn captures; change .turn instance attribute to str
+# 14.07.20 white pawn captures; change turn instance attribute to str
 # 15.07.20 black pawn moves & captures; queening
 # 15.07.20 .move_log instance attribute - conception; knight moves
 # 16.07.20 bishop moves
@@ -31,6 +41,7 @@
 # 20.07.20 scream at user if king is in check - rough trial
 # 26.07.20 defined a gs.move_log variable as a list of dicts
 # 27.07.20 en passant
+# 06.08.20 highlight a square only if there is a piece on it
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -391,12 +402,9 @@ def main():
 						gs.move[1] = gs.move[3]
 						del gs.move[2:]
 			clk = ()
-		if len(gs.move) == 2:
+		#If a piece is selected (and only if it's that colour's turn to move)
+		if len(gs.move) == 2 and gs.board[gs.move[1]][gs.move[0]].startswith(gs.turn):
 			highlight_sq(win, gs.move, gs.turn)		
-
-
-		
-
 
 		event = pg.event.get()
 		for e in event:
@@ -418,7 +426,6 @@ def main():
 
 		pg.display.update()
 		clock.tick(FPS)
-
 
 
 if __name__ == "__main__":
