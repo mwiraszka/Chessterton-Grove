@@ -42,6 +42,7 @@
 # 26.07.20 defined a gs.move_log variable as a list of dicts
 # 27.07.20 en passant
 # 06.08.20 highlight a square only if there is a piece on it
+# 09.08.20 check if king is in check, cont'd
 
 
 # Written by Michal Wiraszka in June-July 2020
@@ -384,17 +385,19 @@ def main():
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
 					move_valid = check_move_valid(
-							gs.board, gs.move, gs.turn, gs.move_log)
-					if move_valid:
+									gs.board, gs.move, gs.turn, gs.move_log)
+					gs.in_check = check_if_in_check(gs.board, gs.move, gs.turn)
+					if gs.in_check:
+						if gs.turn == 'w' and gs.in_check:
+							print('WHITE IS IN CHECK!')
+						elif gs.turn == 'b' and gs.in_check:
+							print('BLACK IS IN CHECK!')
+					elif move_valid and not gs.in_check:
 						move_info = move_piece(gs.board, gs.move)
 						gs.move_log.append(move_info)
 						gs.move = []
 						gs.in_check = check_if_in_check(
 								gs.board, gs.turn, gs.move_log)
-						if gs.turn == 'w' and gs.in_check:
-							print('WHITE IS IN CHECK!')
-						elif gs.turn == 'b' and gs.in_check:
-							print('BLACK IS IN CHECK!')
 						gs.turn = swap_colours(gs.turn)
 					else:
 						# Use the 2nd selected square as new 'From' square
