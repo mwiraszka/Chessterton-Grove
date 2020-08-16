@@ -8,10 +8,8 @@
 # 'Chessterton Grove', my friend, is all you've ever strived to be, but could
 # never quite make it. Now, while 'Chessterton Grove' exudes such grandiosity
 # as to necessitate itself to refer to itself in the third person, it is equally
-# humble to concede that Rome was not built in a day.
-
-# In its current state, 'Chessterton Grove' proudly supports all the functionality
-# you would expect from a chess game of this caliber (and more!), minus giving checks.
+# humble to concede that Rome was not built in a day and may or may not be a
+# little rough around the edges.
 
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
@@ -45,6 +43,7 @@
 # 06.08.20 highlight a square only if there is a piece on it
 # 09.08.20 check if king is in check, cont'd
 # 16.08.20 change .turn to .colour; invalidate move if walking into check
+# 16.08.20 function names simplified; recognize checkmate
 
 
 # ---IMPORTS---
@@ -102,9 +101,8 @@ class GameState():
 
 
 # ---ALL FUNCTIONS---
-def check_move_valid(board, move, colour, move_log):
-	print('check_move_valid entered with: \n', board, "\n", move, '\n', colour, '\n', move_log)
-	# --- Rename variables for ease of use 
+def is_valid(board, move, colour, move_log):
+	# Rename all variables passed in for ease of use 
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -246,35 +244,51 @@ def check_move_valid(board, move, colour, move_log):
 	if proper_move == False:
 		return False
 
-
 	# --- CHECK #5: check if this move would move your king into check.
 	hypothetical_board, move_info = move_piece(board, move)
-	moving_into_check = check_if_in_check(hypothetical_board, colour, move_log)
+	moving_into_check = is_check(hypothetical_board, colour, move_log)
 	if moving_into_check:
 		return False
 	
-	# --- All 5 checks passed, so move deemed valid.
+	# --- All 5 checks passed, so move is deemed valid.
 	return True
 
 
-def check_if_in_check(board, colour, move_log):
+def is_check(board, colour, move_log):
 	king_pos = np.where(board == (str(colour)+'K'))
 	in_check = False
 	for i in range(8):
 	   	for j in range(8):
-	   		if board[i, j][0] == swap_colours(colour):
+	   		if board[i, j][0] == swap_col(colour):
 	   			# Test if any of opponent's pieces would be able to capture king in a valid way
 	   			move = [j, i, king_pos[1].item(), king_pos[0].item()]
-	   			could_be_captured = check_move_valid(
-	   					board, move, swap_colours(colour), move_log)
+	   			could_be_captured = is_valid(board, move, swap_col(colour), move_log)
 	   			if could_be_captured:
 	   				in_check = True
 	return in_check
 
 
+def is_checkmate(board, colour, move_log):
+	in_check = is_check(board, colour, move_log)
+	if not in_check:
+		return False
+	for i in range(8):
+		for j in range(8):
+			# Check if any of this colour's pieces have any valid moves to make.
+			if board[i, j][0] == colour:
+				for x in range(8):
+					for y in range(8):
+						valid_move = is_valid(board, [j, i, y, x], colour, move_log)
+						if valid_move:
+							return False
+	return True
+
+
+
+
+
 def move_piece(board, move):
-	# --- Returns 1) move_info, to later be appended to gs.move_log variable ---
-	#             2) new_board, the board after the move has been made
+	# Returns 1) move_info and 2) new_board (i.e. the board after move is made)
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -312,7 +326,7 @@ def move_piece(board, move):
 	return new_board, move_info
 
 
-def swap_colours(colour):
+def swap_col(colour):
 	if colour == 'w':
 		return 'b'
 	else:
@@ -401,14 +415,16 @@ def main():
 				gs.move.append((clk[0]-100) // SQ_SIZE)
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
-					move_valid = check_move_valid(
-									gs.board, gs.move, gs.colour, gs.move_log)
+					move_valid = is_valid(gs.board, gs.move, gs.colour, gs.move_log)
 					if move_valid:
 						new_board, move_info = move_piece(gs.board, gs.move)
 						gs.board = new_board
 						gs.move_log.append(move_info)
 						gs.move = []
-						gs.colour = swap_colours(gs.colour)
+						gs.colour = swap_col(gs.colour)
+						checkmate = is_checkmate(gs.board, gs.colour, gs.move_log)
+						if checkmate:
+							print('checkmate!')
 					else:
 						# Use the 2nd selected square as new 'From' square
 						gs.move[0] = gs.move[2]
