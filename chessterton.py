@@ -5,12 +5,13 @@
 
 # What is 'Chessterton Grove'?
 # 'Chessterton Grove' is sophistication. 'Chessterton Grove' is poise.
-# 'Chessterton Grove', my friend, is all you've ever strived to be, just in
-# chess form. Now, while 'Chessterton Grove' exudes the grandiosity required
-# to allow itself to refer to itself in the third person, it is equally
-# humble to concede that Rome was not built in a day. In its current state,
-# 'Chessterton Grove' proudly supports all the functionality you would expect
-# from a chess game of this caliber (and more!) Just don't give any checks yet.
+# 'Chessterton Grove', my friend, is all you've ever strived to be, but could
+# never quite make it. Now, while 'Chessterton Grove' exudes such grandiosity
+# as to necessitate itself to refer to itself in the third person, it is equally
+# humble to concede that Rome was not built in a day.
+
+# In its current state, 'Chessterton Grove' proudly supports all the functionality
+# you would expect from a chess game of this caliber (and more!), minus giving checks.
 
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
@@ -43,9 +44,7 @@
 # 27.07.20 en passant
 # 06.08.20 highlight a square only if there is a piece on it
 # 09.08.20 check if king is in check, cont'd
-
-
-# Written by Michal Wiraszka in June-July 2020
+# 16.08.20 change .turn to .colour; invalidate move if walking into check
 
 
 # ---IMPORTS---
@@ -93,17 +92,19 @@ class GameState():
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
 			])
-		
-		self.turn = 'w'		
+		self.colour = 'w'		
 		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
 		self.in_check = False
-		
 		# list of dictionaries; initialize with dummy variable so that check_move_valid
 		# function can be called, and so that ply count (list index) starts at 1
 		self.move_log = [0]
 
 
-def check_move_valid(board, move, turn, move_log):
+
+# ---ALL FUNCTIONS---
+def check_move_valid(board, move, colour, move_log):
+	print('check_move_valid entered with: \n', board, "\n", move, '\n', colour, '\n', move_log)
+	# --- Rename variables for ease of use 
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -114,10 +115,21 @@ def check_move_valid(board, move, turn, move_log):
 	y_direction = -1 if y_diff < 0 else 1
 	piece = board[from_y, from_x]
 
-	if (from_x == to_x and from_y == to_y) or turn != piece[0]:
-		#'To' and 'From' squares the same or not that colour's turn to move
+	# --- CHECK #1: check if 'to' and 'from' squares are the same.
+	if from_x==to_x and from_y==to_y:
 		return False
-	elif (board[to_y, to_x])[0] != piece[0]:
+	
+	# --- CHECK #2: check if trying to move wrong coloured piece.
+	if colour != piece[0]:
+		return False
+	
+	# --- CHECK #3: check if trying to capture own piece.
+	if colour == board[to_y, to_x][0]:
+		return False
+
+	# --- CHECK #4: check if this is proper move for that piece to make.
+	proper_move = False
+	if piece.endswith('P'):
 		if piece == 'wP' and (
 				(
 					# one square forward
@@ -146,7 +158,7 @@ def check_move_valid(board, move, turn, move_log):
 					move_log[-1].get('to_y') == 3 and
 					abs(move_log[-1].get('to_x') - from_x) == 1)
 				):
-			return True
+			proper_move = True
 		elif piece == 'bP' and (
 				(
 					# one square forward
@@ -175,92 +187,99 @@ def check_move_valid(board, move, turn, move_log):
 					move_log[-1].get('to_y') == 4 and
 					abs(move_log[-1].get('to_x') - from_x) == 1)
 				):
-			return True
-		elif piece.endswith('N') and (
-				(abs(x_diff) == 2 and abs(y_diff) == 1) or
-				(abs(x_diff) == 1 and abs(y_diff) == 2)):
-			return True
-		elif piece.endswith('B') and abs(x_diff) == abs(y_diff):
+			proper_move = True
+		else:
+			proper_move = False
+	elif piece.endswith('N'):
+			if (	(abs(x_diff)==2 and abs(y_diff)==1) or
+					(abs(x_diff)==1 and abs(y_diff)==2)):
+				proper_move = True
+			else:
+				proper_move = False
+	elif piece.endswith('B'):
+		proper_move = True
+		if abs(x_diff) != abs(y_diff):
+			proper_move = False
+		else:
 			# Check for any pieces along the way;
 			# If x_diff or y_diff is neg, step direction = -1, and start index
 			# also set to -1 (i.e. don't check origin square at index 0)
 			for i in range(x_direction, x_diff, x_direction):
 				for j in range(y_direction, y_diff, y_direction):
 					if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
-						return False
-			return True
-		elif piece.endswith('R'):
-			if y_diff == 0:
-				for i in range(x_direction, x_diff, x_direction):
-					if board[from_y, from_x+i] != '  ':
-						return False
-			elif x_diff == 0:
-				for i in range(y_direction, y_diff, y_direction):
-					if board[from_y+i, from_x] != '  ':
-						return False
-			else:
-				return False
-			return True
-		elif piece.endswith('Q'):
-			# Check for any pieces along the way, for the three cases:
-			# horizontal move (y_diff is 0), vertical move (x_diff is 0),
-			# and diagonal move (absolute values of x_diff & y_diff are equal) 
-			if y_diff == 0:
-				for i in range(x_direction, x_diff, x_direction):
-					if board[from_y, from_x+i] != '  ':
-						return False
-			elif x_diff == 0:
-				for i in range(y_direction, y_diff, y_direction):
-					if board[from_y+i, from_x] != '  ':
-						return False
-			elif abs(x_diff) == abs(y_diff):
-				for i in range(x_direction, x_diff, x_direction):
-					for j in range(y_direction, y_diff, y_direction):
-						if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
-							return False
-			else:
-				return False
-			return True
-		elif piece.endswith('K') and abs(y_diff) < 2 and abs(x_diff) < 2:
-			return True
-		# None of the above conditions met:
+						proper_move = False
+	elif piece.endswith('R'):
+		proper_move = True
+		if y_diff == 0:
+			for i in range(x_direction, x_diff, x_direction):
+				if board[from_y, from_x+i] != '  ':
+					proper_move = False
+		elif x_diff == 0:
+			for i in range(y_direction, y_diff, y_direction):
+				if board[from_y+i, from_x] != '  ':
+					proper_move = False
+		else:
+			proper_move = False
+	elif piece.endswith('Q'):
+		# Check for any pieces along the way, for the three cases:
+		# horizontal move (y_diff is 0), vertical move (x_diff is 0),
+		# and diagonal move (absolute values of x_diff & y_diff are equal) 
+		proper_move = True
+		if y_diff == 0:
+			for i in range(x_direction, x_diff, x_direction):
+				if board[from_y, from_x+i] != '  ':
+					proper_move = False
+		elif x_diff == 0:
+			for i in range(y_direction, y_diff, y_direction):
+				if board[from_y+i, from_x] != '  ':
+					proper_move = False
+		elif abs(x_diff) == abs(y_diff):
+			for i in range(x_direction, x_diff, x_direction):
+				for j in range(y_direction, y_diff, y_direction):
+					if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
+						proper_move = False
+		else:
+			proper_move = False
+	elif piece.endswith('K') and abs(y_diff)<=1 and abs(x_diff)<=1:
+		proper_move = True
+	
+	if proper_move == False:
 		return False
 
-def check_if_in_check(board, turn, move_log):
-	white_king = np.where(board == 'wK')
-	black_king = np.where(board == 'bK')
-	is_in_check = False
-	if turn == 'w':
-		# Check if white king is currently in check
-		for i in range(8):
-			for j in range(8):
-				if board[i, j][0] == 'b':
-					# Test all possible black piece moves onto white king's square
-					move = [j, i, int(white_king[1]), int(white_king[0])]
-					is_in_check = check_move_valid(board, move, 'b', move_log)
-					if is_in_check:
-						return is_in_check
-	else:
-		# Check if black king is currently in check
-		for i in range(8):
-			for j in range(8):
-				if board[i, j][0] == 'w':
-					# Test all possible white piece moves onto black king's square
-					move = [j, i, int(black_king[1]), int(black_king[0])]
-					is_in_check = check_move_valid(board, move, 'w', move_log)
-					if is_in_check:
-						return is_in_check
-	return False
+
+	# --- CHECK #5: check if this move would move your king into check.
+	hypothetical_board, move_info = move_piece(board, move)
+	moving_into_check = check_if_in_check(hypothetical_board, colour, move_log)
+	if moving_into_check:
+		return False
+	
+	# --- All 5 checks passed, so move deemed valid.
+	return True
+
+
+def check_if_in_check(board, colour, move_log):
+	king_pos = np.where(board == (str(colour)+'K'))
+	in_check = False
+	for i in range(8):
+	   	for j in range(8):
+	   		if board[i, j][0] == swap_colours(colour):
+	   			# Test if any of opponent's pieces would be able to capture king in a valid way
+	   			move = [j, i, king_pos[1].item(), king_pos[0].item()]
+	   			could_be_captured = check_move_valid(
+	   					board, move, swap_colours(colour), move_log)
+	   			if could_be_captured:
+	   				in_check = True
+	return in_check
 
 
 def move_piece(board, move):
-	# Returns move_info to later be appended to gs.move_log variable
+	# --- Returns 1) move_info, to later be appended to gs.move_log variable ---
+	#             2) new_board, the board after the move has been made
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
 	to_y = move[3]
 	piece = board[from_y, from_x]
-	
 	move_info = {
 		'piece': piece,
 		'from_x': from_x,
@@ -270,37 +289,31 @@ def move_piece(board, move):
 		'capture': board[to_y, to_x],
 		'check': False
 		}
-
+	new_board = board.copy()
 	# En passant scenario: register move as a special capture and
 	# manually remove the opponent's pawn
 	if piece.endswith('P') and\
 			abs(from_x - to_x) == 1 and board[to_y, to_x] == '  ':
 		move_info['capture'] = 'ep'
 		if to_y == 2:
-			board[to_y + 1, to_x] = '  '
+			new_board[to_y + 1, to_x] = '  '
 		else:
-			board[to_y - 1, to_x] = '  '
-
+			new_board[to_y - 1, to_x] = '  '
 	# Pawn queening scenario: change pawn to a queen;
 	# otherwise simply move that same piece to the new square
 	if piece == 'wP' and to_y == 0:
-		board[to_y, to_x] = 'wQ'
+		new_board[to_y, to_x] = 'wQ'
 	elif piece == 'bP' and to_y == 7:
-		board[to_y, to_x] = 'bQ'
+		new_board[to_y, to_x] = 'bQ'
 	else:
-		board[to_y, to_x] = board[from_y, from_x]
-	board[from_y, from_x] = '  '
-	
+		new_board[to_y, to_x] = new_board[from_y, from_x]
+	new_board[from_y, from_x] = '  '
 
-	print(piece[1] + ' at ' + cr_fr([from_x, from_y]) +\
-		   ' moved to ' + cr_fr([to_x, to_y]) + '.')
-	
-	return move_info
+	return new_board, move_info
 
 
-def swap_colours(turn):
-	# Return which colour moves next
-	if turn == 'w':
+def swap_colours(colour):
+	if colour == 'w':
 		return 'b'
 	else:
 		return 'w'
@@ -339,16 +352,16 @@ def draw_pieces(screen, board):
 				pc = board[i][j]
 				screen.blit(PIECE_IMG[pc],(100 + j*SQ_SIZE, 100 + i*SQ_SIZE))
 
-def highlight_sq(screen, sq, turn):
-	# Draw red square with thickness = 3 by connecting the four points
-	if turn == 'w':
+def highlight_sq(screen, sq, colour):
+	# Draw red square 3 pixels thick by connecting the four points
+	if colour == 'w':
 		turn_col = WHITE
 	else:
 		turn_col = BLACK
-	pg.draw.lines(screen, turn_col, True, [(100+sq[0]*50,100+sq[1]*50),\
-								      	   (150+sq[0]*50,100+sq[1]*50),\
-								           (150+sq[0]*50,150+sq[1]*50),\
-								           (100+sq[0]*50,150+sq[1]*50)], 3)
+	pg.draw.lines(screen, turn_col, True, [(100+sq[0]*50, 100+sq[1]*50),\
+								      	   (150+sq[0]*50, 100+sq[1]*50),\
+								           (150+sq[0]*50, 150+sq[1]*50),\
+								           (100+sq[0]*50, 150+sq[1]*50)], 3)
 def cr_fr(cr):
 	# Convert column-row notation to file-rank notation
 	# Expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
@@ -373,6 +386,10 @@ def main():
 	load_images()
 	clk = ()
 	move_valid = False
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('NEW GAME!')
+	print('\n\n\n\n\n')
 	while True:
 		win.fill(GREEN)
 		draw_chessboard(win)
@@ -385,20 +402,13 @@ def main():
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
 					move_valid = check_move_valid(
-									gs.board, gs.move, gs.turn, gs.move_log)
-					gs.in_check = check_if_in_check(gs.board, gs.move, gs.turn)
-					if gs.in_check:
-						if gs.turn == 'w' and gs.in_check:
-							print('WHITE IS IN CHECK!')
-						elif gs.turn == 'b' and gs.in_check:
-							print('BLACK IS IN CHECK!')
-					elif move_valid and not gs.in_check:
-						move_info = move_piece(gs.board, gs.move)
+									gs.board, gs.move, gs.colour, gs.move_log)
+					if move_valid:
+						new_board, move_info = move_piece(gs.board, gs.move)
+						gs.board = new_board
 						gs.move_log.append(move_info)
 						gs.move = []
-						gs.in_check = check_if_in_check(
-								gs.board, gs.turn, gs.move_log)
-						gs.turn = swap_colours(gs.turn)
+						gs.colour = swap_colours(gs.colour)
 					else:
 						# Use the 2nd selected square as new 'From' square
 						gs.move[0] = gs.move[2]
@@ -406,8 +416,8 @@ def main():
 						del gs.move[2:]
 			clk = ()
 		#If a piece is selected (and only if it's that colour's turn to move)
-		if len(gs.move) == 2 and gs.board[gs.move[1]][gs.move[0]].startswith(gs.turn):
-			highlight_sq(win, gs.move, gs.turn)		
+		if len(gs.move) == 2 and gs.board[gs.move[1]][gs.move[0]].startswith(gs.colour):
+			highlight_sq(win, gs.move, gs.colour)		
 
 		event = pg.event.get()
 		for e in event:
