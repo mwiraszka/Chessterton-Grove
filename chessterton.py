@@ -44,6 +44,7 @@
 # 09.08.20 check if king is in check, cont'd
 # 16.08.20 change .turn to .colour; invalidate move if walking into check
 # 16.08.20 function names simplified; recognize checkmate
+# 16.08.20 recognize stalemate
 
 
 # ---IMPORTS---
@@ -244,13 +245,13 @@ def is_valid(board, move, colour, move_log):
 	if proper_move == False:
 		return False
 
-	# --- CHECK #5: check if this move would move your king into check.
+	# --- CHECK #5: check if this move would move your king into check
 	hypothetical_board, move_info = move_piece(board, move)
 	moving_into_check = is_check(hypothetical_board, colour, move_log)
 	if moving_into_check:
 		return False
 	
-	# --- All 5 checks passed, so move is deemed valid.
+	# --- All 5 checks passed, so move is deemed valid
 	return True
 
 
@@ -268,23 +269,17 @@ def is_check(board, colour, move_log):
 	return in_check
 
 
-def is_checkmate(board, colour, move_log):
-	in_check = is_check(board, colour, move_log)
-	if not in_check:
-		return False
+def is_valid_exist(board, colour, move_log):
+	# Check all possible moves for all of given colour's pieces
 	for i in range(8):
 		for j in range(8):
-			# Check if any of this colour's pieces have any valid moves to make.
 			if board[i, j][0] == colour:
 				for x in range(8):
 					for y in range(8):
 						valid_move = is_valid(board, [j, i, y, x], colour, move_log)
 						if valid_move:
-							return False
-	return True
-
-
-
+							return True
+	return False
 
 
 def move_piece(board, move):
@@ -422,16 +417,19 @@ def main():
 						gs.move_log.append(move_info)
 						gs.move = []
 						gs.colour = swap_col(gs.colour)
-						checkmate = is_checkmate(gs.board, gs.colour, gs.move_log)
-						if checkmate:
-							print('checkmate!')
+						valid_exists = is_valid_exist(gs.board, gs.colour, gs.move_log)
+						in_check = is_check(gs.board, gs.colour, gs.move_log)
+						if in_check and not valid_exists:
+							print('Checkmate! Game over.')
+						if not in_check and not valid_exists:
+							print('Stalemate! Game over.')
 					else:
-						# Use the 2nd selected square as new 'From' square
+						# Use the 2nd selected square as new 'from' square
 						gs.move[0] = gs.move[2]
 						gs.move[1] = gs.move[3]
 						del gs.move[2:]
 			clk = ()
-		#If a piece is selected (and only if it's that colour's turn to move)
+		# If a piece is selected (and only if it's that colour's turn to move)
 		if len(gs.move) == 2 and gs.board[gs.move[1]][gs.move[0]].startswith(gs.colour):
 			highlight_sq(win, gs.move, gs.colour)		
 
@@ -445,10 +443,10 @@ def main():
 				pass
 			if e.type == KEYUP:
 				if e.key == K_b:
-					# display current board state in text
+					# Display current board state in text
 					print('\n' + str(gs.board) + '\n')
 				if e.key == K_l:
-					# display move log list
+					# Display move log list
 					print('\n' + str(gs.move_log) + '\n')
 				if e.key == K_ESCAPE or e.key == K_q:
 					terminate()
