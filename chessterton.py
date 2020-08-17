@@ -11,6 +11,7 @@
 # humble to concede that Rome was not built in a day and may or may not be a
 # little rough around the edges.
 
+# ---VERSION 1.0:
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
 # 21.06.20 (test - github update)
@@ -46,6 +47,7 @@
 # 16.08.20 function names simplified; recognize checkmate
 # 16.08.20 recognize stalemate
 # 16.08.20 get_move_info; notation displayed in shell by pressing b (glitchy)
+# 17.08.20 fixed is_check, is_checkmate, and is_stalemate function
 
 
 # ---IMPORTS---
@@ -245,11 +247,10 @@ def is_valid(board, colour, move, move_log):
 		return False
 	
 	# --- CHECK #5: check if this move would move the king into check
-	#would_be_check = False
-	#hyp_board = move_piece(board, move)
-	#would_be_check = is_check(hyp_board, swap_col(colour), move_log)
-	#if would_be_check:
-	#	return False
+	hyp_board = move_piece(board, move)
+	would_be_check = is_check(hyp_board, swap_col(colour), move_log)
+	if would_be_check:
+		return False
 
 	# --- All checks passed: move deemed valid
 	return True	
@@ -285,53 +286,37 @@ def move_piece(board, move):
 
 
 def does_valid_move_exist(board, colour, move_log):
-	# Check all possible moves for all of given colour's pieces
+	# Given a position, check all possible moves for all of given colour's pieces
 	for i in range(8):
 		for j in range(8):
 			if board[i, j][0] == colour:
 				for x in range(8):
 					for y in range(8):
+						print('checking if valid move exists with: ', colour, [j, i, y, x])
 						valid_move = is_valid(board, colour, [j, i, y, x], move_log)
 						if valid_move:
 							return True
 	return False
 
 def is_check(board, colour, move_log):
-	king_pos = np.where(board == (str(colour)+'K'))
+	# Given a position, check if this colour is currently giving check
+	opp_king = np.where(board == (str(swap_col(colour))+'K'))
 	in_check = False
 	for i in range(8):
 	   	for j in range(8):
-	   		if board[i, j][0] == swap_col(colour):
-	   			# Test if any of opponent's pieces could capture king
-	   			move = [j, i, king_pos[1].item(), king_pos[0].item()]
-	   			could_be_captured = is_valid(board, swap_col(colour), move, move_log)
+	   		if board[i, j][0] == colour:
+	   			# Test if any pieces in this new position are
+	   			# threatening to capture opponent's king
+	   			move = [j, i, opp_king[1].item(), opp_king[0].item()]
+	   			could_be_captured = is_valid(board, colour, move, move_log)
 	   			if could_be_captured:
 	   				in_check = True
 	return in_check
 
-def is_checkmate(board, colour, move_log):
-	valid_move_exists = does_valid_move_exist(board, colour, move_log)
-	in_check = is_check(board, colour, move_log)
-	if valid_move_exists == False and in_check == True:
-		return True
-	else:
-		return False
-
-def is_stalemate(board, colour, move_log):
-	valid_move_exists = does_valid_move_exist(board, colour, move_log)
-	in_check = is_check(board, colour, move_log)
-	if valid_move_exists == False and in_check == False:
-		return True
-	else:
-		return False
 
 
 
-
-
-
-
-# ---FUNCTIONS: DRAW TO SCREEN---
+# ---FUNCTIONS: DRAWING TO SCREEN---
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
 	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB','bP',
@@ -386,12 +371,14 @@ def cr_fr(cr):
 	# Returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
 	fr = chr(97 + cr[0]) + str(8 - cr[1])
 	return (fr)
+
 def fr_cr(fr):
 	# Convert file-rank notation to column-row notation
 	# Expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
 	# Returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
 	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
 	return cr
+
 def swap_col(colour):
 	if colour == 'w':
 		return 'b'
@@ -413,14 +400,25 @@ def get_move_info(board, colour, move, move_log):
 		'checkmate': False,
 		'stalemate': False
 		}
-	move_info['check'] = is_check(board, colour, move_log)
-	move_info['checkmate'] = is_checkmate(board, colour, move_log)
-	move_info['stalemate'] = is_stalemate(board, colour, move_log)
+	new_board = move_piece(board, move)
+
+	# Is this move a check; and will the opponent have any moves next turn
+	giving_check = is_check(new_board, colour, move_log)
+	opp_has_moves = does_valid_move_exist(new_board, swap_col(colour), move_log)
+
+	move_info['check'] = giving_check
+	if giving_check and not opp_has_moves:
+		move_info['checkmate'] = True
+	elif not giving_check and not opp_has_moves:
+		move_info['stalemate'] = True
+	
 	# Manually register en passant as a capture
 	if len(move_log) > 1:
 		if board[move[1], move[0]].endswith('P') and\
 				abs(move[0]-move[2]) == 1 and board[move[3], move[2]] == '  ':
 			move_info['capture'] = 'ep'
+	print('\n', move_info, '\n')
+	
 	return move_info
 
 
@@ -463,7 +461,7 @@ def display_move_log(move_log):
 		move_list.append(f'{piece}{capture}{moved_to}{special_move}')
 	
 	print('---Move List---')
-	for i in range(len(move_list)):
+	for i in range(0, len(move_list), 2):
 		offset = 7 - len(move_list[i])
 		if i == (len(move_list) - 1):
 			print(move_list[i])
@@ -482,8 +480,10 @@ def main():
 	gs = GameState()
 	load_images()
 	clk = ()
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nNEW GAME\n\n\n\n\n\n')
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('*'*70 + '\n' + ' '*32 + 'NEW GAME' + '\n' + '*'*70)
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
 	while True:
 		win.fill(GREEN)
 		draw_chessboard(win)
@@ -525,6 +525,7 @@ def main():
 			if e.type == KEYUP:
 				if e.key == K_b:
 					# Display current board state in text
+					print('\n\n\n\n\n\n\n\n\n\n')
 					print('\n' + str(gs.board) + '\n')
 					display_move_log(gs.move_log)
 				if e.key == K_l:
