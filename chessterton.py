@@ -45,6 +45,7 @@
 # 16.08.20 change .turn to .colour; invalidate move if walking into check
 # 16.08.20 function names simplified; recognize checkmate
 # 16.08.20 recognize stalemate
+# 16.08.20 get_move_info; notation displayed in shell by pressing b (glitchy)
 
 
 # ---IMPORTS---
@@ -72,12 +73,10 @@ PIECE_IMG = {}
 # ---PYGAME SETUP---
 pg.init()
 win = pg.display.set_mode((WIN_SIZE, WIN_SIZE), 0, 32)
-pg.display.set_caption("Chessterton Grove")
+pg.display.set_caption("Chessterton Grove v1.0")
 clock = pg.time.Clock()
 pg.font.get_fonts()
 coord_font = pg.font.SysFont('helvetica', 18, False, False)
-
-
 
 # ---MAIN CLASS CONTAINING ALL OF GAME'S CURRENT STATE INFORMATION---
 class GameState():
@@ -94,15 +93,14 @@ class GameState():
 			])
 		self.colour = 'w'		
 		self.move = [] #list of ints [from-x, from-y, to-x, to-y]
-		self.in_check = False
 		# list of dictionaries; initialize with dummy variable so that check_move_valid
 		# function can be called, and so that ply count (list index) starts at 1
 		self.move_log = [0]
 
 
 
-# ---ALL FUNCTIONS---
-def is_valid(board, move, colour, move_log):
+# ---FUNCTIONS: MAIN LOGIC FUNCTIONS---
+def is_valid(board, colour, move, move_log):
 	# Rename all variables passed in for ease of use 
 	from_x = move[0]
 	from_y = move[1]
@@ -126,7 +124,7 @@ def is_valid(board, move, colour, move_log):
 	if colour == board[to_y, to_x][0]:
 		return False
 
-	# --- CHECK #4: check if this is proper move for that piece to make.
+	# --- CHECK #4: check if this is proper move for the piece to make.
 	proper_move = False
 	if piece.endswith('P'):
 		if piece == 'wP' and (
@@ -146,8 +144,10 @@ def is_valid(board, move, colour, move_log):
 					# capture
 					abs(x_diff) == 1 and
 					from_y - to_y == 1 and
-					board[to_y, to_x].startswith('b')) or
-				(	
+					board[to_y, to_x].startswith('b'))
+				):
+			proper_move = True
+		elif piece == 'wP' and len(move_log) > 1 and (	
 					# capture en passant
 					from_y == 3 and
 					to_y == 2 and
@@ -155,10 +155,9 @@ def is_valid(board, move, colour, move_log):
 					move_log[-1].get('piece') == 'bP' and
 					move_log[-1].get('from_y') == 1 and
 					move_log[-1].get('to_y') == 3 and
-					abs(move_log[-1].get('to_x') - from_x) == 1)
-				):
+					abs(move_log[-1].get('to_x') - from_x) == 1):
 			proper_move = True
-		elif piece == 'bP' and (
+		elif piece == 'bP'  and (
 				(
 					# one square forward
 					from_x == to_x and
@@ -175,8 +174,10 @@ def is_valid(board, move, colour, move_log):
 					# capture
 					abs(x_diff) == 1 and
 					to_y - from_y == 1 and
-					board[to_y, to_x].startswith('w')) or
-				(	
+					board[to_y, to_x].startswith('w'))
+				):
+			proper_move = True
+		elif piece == 'bP'  and len(move_log) > 1 and (
 					# capture en passant
 					from_y == 4 and
 					to_y == 5 and
@@ -184,8 +185,7 @@ def is_valid(board, move, colour, move_log):
 					move_log[-1].get('piece') == 'wP' and
 					move_log[-1].get('from_y') == 6 and
 					move_log[-1].get('to_y') == 4 and
-					abs(move_log[-1].get('to_x') - from_x) == 1)
-				):
+					abs(move_log[-1].get('to_x') - from_x) == 1):
 			proper_move = True
 		else:
 			proper_move = False
@@ -241,19 +241,60 @@ def is_valid(board, move, colour, move_log):
 			proper_move = False
 	elif piece.endswith('K') and abs(y_diff)<=1 and abs(x_diff)<=1:
 		proper_move = True
-	
 	if proper_move == False:
 		return False
-
-	# --- CHECK #5: check if this move would move your king into check
-	hypothetical_board, move_info = move_piece(board, move)
-	moving_into_check = is_check(hypothetical_board, colour, move_log)
-	if moving_into_check:
-		return False
 	
-	# --- All 5 checks passed, so move is deemed valid
-	return True
+	# --- CHECK #5: check if this move would move the king into check
+	#would_be_check = False
+	#hyp_board = move_piece(board, move)
+	#would_be_check = is_check(hyp_board, swap_col(colour), move_log)
+	#if would_be_check:
+	#	return False
 
+	# --- All checks passed: move deemed valid
+	return True	
+	
+
+
+def move_piece(board, move):
+	# Returns a new board (i.e. the board after move is made)
+	from_x = move[0]
+	from_y = move[1]
+	to_x = move[2]
+	to_y = move[3]
+	piece = board[from_y, from_x]
+	new_board = board.copy()
+	# En passant scenario: manually remove opponent's pawn
+	if piece.endswith('P') and\
+			abs(from_x-to_x) == 1 and board[to_y, to_x] == '  ':
+		if to_y == 2:
+			new_board[to_y+1, to_x] = '  '
+		else:
+			new_board[to_y-1, to_x] = '  '
+	# Pawn queening scenario: change pawn to a queen;
+	# otherwise simply move that same piece to the new square
+	if piece=='wP' and to_y==0:
+		new_board[to_y, to_x] = 'wQ'
+	elif piece=='bP' and to_y==7:
+		new_board[to_y, to_x] = 'bQ'
+	else:
+		new_board[to_y, to_x] = new_board[from_y, from_x]
+	new_board[from_y, from_x] = '  '
+	return new_board
+
+
+
+def does_valid_move_exist(board, colour, move_log):
+	# Check all possible moves for all of given colour's pieces
+	for i in range(8):
+		for j in range(8):
+			if board[i, j][0] == colour:
+				for x in range(8):
+					for y in range(8):
+						valid_move = is_valid(board, colour, [j, i, y, x], move_log)
+						if valid_move:
+							return True
+	return False
 
 def is_check(board, colour, move_log):
 	king_pos = np.where(board == (str(colour)+'K'))
@@ -261,73 +302,36 @@ def is_check(board, colour, move_log):
 	for i in range(8):
 	   	for j in range(8):
 	   		if board[i, j][0] == swap_col(colour):
-	   			# Test if any of opponent's pieces would be able to capture king in a valid way
+	   			# Test if any of opponent's pieces could capture king
 	   			move = [j, i, king_pos[1].item(), king_pos[0].item()]
-	   			could_be_captured = is_valid(board, move, swap_col(colour), move_log)
+	   			could_be_captured = is_valid(board, swap_col(colour), move, move_log)
 	   			if could_be_captured:
 	   				in_check = True
 	return in_check
 
-
-def is_valid_exist(board, colour, move_log):
-	# Check all possible moves for all of given colour's pieces
-	for i in range(8):
-		for j in range(8):
-			if board[i, j][0] == colour:
-				for x in range(8):
-					for y in range(8):
-						valid_move = is_valid(board, [j, i, y, x], colour, move_log)
-						if valid_move:
-							return True
-	return False
-
-
-def move_piece(board, move):
-	# Returns 1) move_info and 2) new_board (i.e. the board after move is made)
-	from_x = move[0]
-	from_y = move[1]
-	to_x = move[2]
-	to_y = move[3]
-	piece = board[from_y, from_x]
-	move_info = {
-		'piece': piece,
-		'from_x': from_x,
-		'from_y': from_y,
-		'to_x': to_x,
-		'to_y': to_y,
-		'capture': board[to_y, to_x],
-		'check': False
-		}
-	new_board = board.copy()
-	# En passant scenario: register move as a special capture and
-	# manually remove the opponent's pawn
-	if piece.endswith('P') and\
-			abs(from_x - to_x) == 1 and board[to_y, to_x] == '  ':
-		move_info['capture'] = 'ep'
-		if to_y == 2:
-			new_board[to_y + 1, to_x] = '  '
-		else:
-			new_board[to_y - 1, to_x] = '  '
-	# Pawn queening scenario: change pawn to a queen;
-	# otherwise simply move that same piece to the new square
-	if piece == 'wP' and to_y == 0:
-		new_board[to_y, to_x] = 'wQ'
-	elif piece == 'bP' and to_y == 7:
-		new_board[to_y, to_x] = 'bQ'
+def is_checkmate(board, colour, move_log):
+	valid_move_exists = does_valid_move_exist(board, colour, move_log)
+	in_check = is_check(board, colour, move_log)
+	if valid_move_exists == False and in_check == True:
+		return True
 	else:
-		new_board[to_y, to_x] = new_board[from_y, from_x]
-	new_board[from_y, from_x] = '  '
+		return False
 
-	return new_board, move_info
-
-
-def swap_col(colour):
-	if colour == 'w':
-		return 'b'
+def is_stalemate(board, colour, move_log):
+	valid_move_exists = does_valid_move_exist(board, colour, move_log)
+	in_check = is_check(board, colour, move_log)
+	if valid_move_exists == False and in_check == False:
+		return True
 	else:
-		return 'w'
+		return False
 
 
+
+
+
+
+
+# ---FUNCTIONS: DRAW TO SCREEN---
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
 	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB','bP',
@@ -371,34 +375,115 @@ def highlight_sq(screen, sq, colour):
 								      	   (150+sq[0]*50, 100+sq[1]*50),\
 								           (150+sq[0]*50, 150+sq[1]*50),\
 								           (100+sq[0]*50, 150+sq[1]*50)], 3)
+
+
+
+
+# ---FUNCTIONS: CONVERSIONS---
 def cr_fr(cr):
 	# Convert column-row notation to file-rank notation
 	# Expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
 	# Returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
 	fr = chr(97 + cr[0]) + str(8 - cr[1])
 	return (fr)
-
 def fr_cr(fr):
 	# Convert file-rank notation to column-row notation
 	# Expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
 	# Returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
 	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
 	return cr
+def swap_col(colour):
+	if colour == 'w':
+		return 'b'
+	else:
+		return 'w'	
 
+
+
+# ---FUNCTIONS: OTHER---
+def get_move_info(board, colour, move, move_log):
+	move_info = {
+		'piece': board[move[1], move[0]],
+		'from_x': move[0],
+		'from_y': move[1],
+		'to_x': move[2],
+		'to_y': move[3],
+		'capture': board[move[3], move[2]],
+		'check': False,
+		'checkmate': False,
+		'stalemate': False
+		}
+	move_info['check'] = is_check(board, colour, move_log)
+	move_info['checkmate'] = is_checkmate(board, colour, move_log)
+	move_info['stalemate'] = is_stalemate(board, colour, move_log)
+	# Manually register en passant as a capture
+	if len(move_log) > 1:
+		if board[move[1], move[0]].endswith('P') and\
+				abs(move[0]-move[2]) == 1 and board[move[3], move[2]] == '  ':
+			move_info['capture'] = 'ep'
+	return move_info
+
+
+def display_move_log(move_log):
+	# Convert move_log to list of moves in regular chess notation
+	move_list = []
+	for i in range(1, len(move_log)):
+
+		# By default use piece's one-letter shorthand
+		piece = move_log[i]['piece'][1]
+
+		# If pawn is capturing, use the letter of square it came from
+		# Otherwise, simply drop the P
+		if piece == 'P':
+			if move_log[i]['capture'] != '  ':
+				moved_from = cr_fr([move_log[i]['from_x'], move_log[i]['from_y']])
+				piece = moved_from[0]
+			else:
+				piece = ''
+
+		# If captured an empty square, no capture (x) symbol given
+		if move_log[i]['capture'] == '  ':
+			capture = ''
+		else:
+			capture = 'x'
+
+		# Square moving to, in algebraic chess notation
+		moved_to = cr_fr([move_log[i]['to_x'], move_log[i]['to_y']])
+
+		# Special symbols to add to the end
+		if move_log[i]['checkmate']:
+			special_move = '#'
+		elif move_log[i]['check']:
+			special_move = '+'
+		elif move_log[i]['stalemate']:
+			special_move = '$'
+		else:
+			special_move = ''
+
+		move_list.append(f'{piece}{capture}{moved_to}{special_move}')
+	
+	print('---Move List---')
+	for i in range(len(move_list)):
+		offset = 7 - len(move_list[i])
+		if i == (len(move_list) - 1):
+			print(move_list[i])
+		else:
+			print(move_list[i], ' '*offset, move_list[i+1])
+			
+		
 def terminate():
 	pg.quit()
 	sys.exit()
 
 
+
+# ---MAIN GAME LOOP---
 def main():
 	gs = GameState()
 	load_images()
 	clk = ()
-	move_valid = False
 	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('NEW GAME!')
-	print('\n\n\n\n\n')
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nNEW GAME\n\n\n\n\n\n')
 	while True:
 		win.fill(GREEN)
 		draw_chessboard(win)
@@ -410,19 +495,15 @@ def main():
 				gs.move.append((clk[0]-100) // SQ_SIZE)
 				gs.move.append((clk[1]-100) // SQ_SIZE)
 				if len(gs.move) == 4:
-					move_valid = is_valid(gs.board, gs.move, gs.colour, gs.move_log)
+					move_valid = is_valid(
+							gs.board, gs.colour, gs.move, gs.move_log)
 					if move_valid:
-						new_board, move_info = move_piece(gs.board, gs.move)
-						gs.board = new_board
+						move_info = get_move_info(gs.board, gs.colour, gs.move, gs.move_log)
 						gs.move_log.append(move_info)
+						new_board = move_piece(gs.board, gs.move)
+						gs.board = new_board
 						gs.move = []
 						gs.colour = swap_col(gs.colour)
-						valid_exists = is_valid_exist(gs.board, gs.colour, gs.move_log)
-						in_check = is_check(gs.board, gs.colour, gs.move_log)
-						if in_check and not valid_exists:
-							print('Checkmate! Game over.')
-						if not in_check and not valid_exists:
-							print('Stalemate! Game over.')
 					else:
 						# Use the 2nd selected square as new 'from' square
 						gs.move[0] = gs.move[2]
@@ -445,6 +526,7 @@ def main():
 				if e.key == K_b:
 					# Display current board state in text
 					print('\n' + str(gs.board) + '\n')
+					display_move_log(gs.move_log)
 				if e.key == K_l:
 					# Display move log list
 					print('\n' + str(gs.move_log) + '\n')
@@ -453,7 +535,6 @@ def main():
 
 		pg.display.update()
 		clock.tick(FPS)
-
 
 if __name__ == "__main__":
 	main()
