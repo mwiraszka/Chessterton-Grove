@@ -1,15 +1,8 @@
 # CHESSTERTON GROVE
 # by Michal Wiraszka
 
-# Written fully in Python, making heavy use of its Pygame and Numpy modules.
+# A chess game made entirely on Python, making heavy use of its Pygame and Numpy modules.
 
-# What is 'Chessterton Grove'?
-# 'Chessterton Grove' is sophistication. 'Chessterton Grove' is poise.
-# 'Chessterton Grove', my friend, is all you've ever strived to be, but could
-# never quite make it. Now, while 'Chessterton Grove' exudes such grandiosity
-# as to necessitate itself to refer to itself in the third person, it is equally
-# humble to concede that Rome was not built in a day and may or may not be a
-# little rough around the edges.
 
 # ---VERSION 1.0:
 # 19.06.20 project started
@@ -49,6 +42,7 @@
 # 16.08.20 get_move_info; notation displayed in shell by pressing b (glitchy)
 # 17.08.20 fixed glitch with check, checkmate, and stalemate recognition
 # 17.08.20 added right-side section to window; move_log to include more specific move traits; castling
+# 19.08.20 major redesign - Move() & GameState() classes re-defining (in progress)
 
 
 # ---IMPORTS---
@@ -74,15 +68,18 @@ YELLOW = (200,200,0)
 GREEN = (14,80,14)
 PIECE_IMG = {}
 
-# ---PYGAME SETUP---
+pg.font.get_fonts()
+FONT_COORD = pg.font.SysFont('helvetica', 18, False, False)
+
+
+# ---PYGAME SETUP--------------------------------------------------------------
 pg.init()
 win = pg.display.set_mode((WIN_W, WIN_H), 0, 32)
 pg.display.set_caption("Chessterton Grove v1.0")
 clock = pg.time.Clock()
-pg.font.get_fonts()
-coord_font = pg.font.SysFont('helvetica', 18, False, False)
 
-# ---MAIN CLASS CONTAINING ALL OF GAME'S CURRENT STATE INFORMATION---
+
+# ---CLASSES-------------------------------------------------------------------
 class GameState():
 	def __init__(self):
 		self.board = np.array([
@@ -95,15 +92,216 @@ class GameState():
 			['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
 			['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
 			])
-		# New move coordinates: [from-x, from-y, to-x, to-y]
-		self.move_coord = [] 
-		self.colour = 'w'
-		self.move_log = []
+		self.on_move = 1
+		self.is_turn = 'w'
+		self.is_checkmate = False
+		self.is_stalemate = False
+		self.is_insuff_material = False
+		self.click_coord = [] # Click's coordinates [x, y]
+		self.move_coord = []  # Move's coordinates [from-x, from-y, to-x, to-y]
+		self.moves = []
+
+
+class Move():
+	def __init__(self, gs, mc):
+	# Takes GameState() object and move coord list [from-x, from-y, to-x, to-y]
+		# General Move Information
+		self.move_num = gs.on_move
+		self.ply_num = int((self.move_num + 1) / 2)
+		self.last_move = [gs.moves[-1] if (not self.move_num == 1) else None
+		self.turn = gs.is_turn
+
+		# Location on Board Information
+		self.from_x = mc[0]
+		self.from_y = mc[1]
+		self.to_x = mc[2]
+		self.to_y = mc[3]
+		self.x_diff = self.to_x - self.from_x
+		self.y_diff = self.to_y - self.from_y
+		self.x_direction = -1 if x_diff < 0 else 1
+		self.y_direction = -1 if x_diff < 0 else 1
+
+		# Piece Information
+		self.piece = self.board[self.from_y, self.from_x]
+		self.piece_kind = self.piece[1]
+		self.piece_colour = self.piece[0]
+		
+		# Special Move Attributes
+		self.is_capture = self.board[self.to_y, self.to_x]
+		
+		self.is_double_pawn_push = ((self.piece_kind == 'P') and\
+								    (self.x_diff == 2) and\
+								    (abs(self.y_diff) == 2) and\
+								    (self.from_y == 1 or self.from_y == 6))
+
+		self.is_check = check_if_check()
+
+
+		self.valid_moves_left = does_valid_move_exist(self.board_after,            ####################
+												   swap(self.turn),			# moves need to be sent?
+												   game_state.moves)			# maybe only .last_move needed?
+		
+		self.opp_king = np.where(self.board == (str(swap(self.turn))+'K'))
+		for i in range(8):
+	   		for j in range(8):
+	   			if board[i, j][0] == self.turn:
+	   			
+	   			move = [j, i, opp_king[1].item(), opp_king[0].item()]
+	   			can_capture = is_valid_move(board, colour, move, moves)
+	   			self.is_check = True
+
+
+
+		self.stalemate = not self.valid_moves_left and not self.check
+		self.checkmate = not self.valid_moves_left and self.check
+
+		if (
+				(len(game_state.moves) > 3) and\
+				(self.piece_kind == 'P') and\
+				(abs(self.x_diff) == 1) and\
+				(self.capture == '  ') and\
+				(self.last_move.double_pawn_push) and\
+				(abs(self.last_move.x_to - self.x_to) == 1)\
+				(self.last_move.y_to == self.y_to)
+				):
+			self.is_en_passant = True
+		else:
+			self.is_en_passant = False
+
+
+		if len(game_state.moves) > 2:
+			self.lost_castle_qs = self.prev_turn.lost_castle_qs
+			self.lost_castle_ks = self.prev_turn.lost_castle_ks
+		else:
+			self.lost_castle_qs = False
+			self.lost_castle_ks = False
+			if self.piece_kind == 'K':
+				self.lost_castle_qs = True
+				self.lost_castle_ks = True
+			elif self.piece_kind == 'R' and self.from_x == 0:
+				self.lost_castle_qs = True
+			elif self.piece_kind == 'R' and self.from_x == 7:
+				self.lost_castle_ks = True	
+		
+		self.is_castle_qs = False
+		self.is_castle_ks = False
+		if (
+				(len(game_state.moves) > 6) and\
+				(self.piece_kind == 'K') and\
+				(self.y_diff == 0) and\
+				(self.x_diff == 2)
+				):
+			if (
+					(not self.last_move.lost_castle_qs) and\
+					(self.x_direction == -1) and\
+					(self.board[self.from_y][(self.from_x - 1)] == ' ') and\
+					(self.board[self.from_y][(self.from_x - 2)] == ' ') and\
+					(self.board[self.from_y][(self.from_x - 3)] == ' ')):
+				self.is_castle_qs = True
+			elif (
+					(not self.last_move.lost_castle_ks) and\
+					(self.x_direction == 1) and\
+					(self.board[self.from_y][(self.from_x + 1)] == ' ') and\
+					(self.board[self.from_y][(self.from_x + 2)] == ' ')):
+				self.is_castle_ks = True
+
+		if self.prev_turn:
+			self.pieces_left = self.last_move.pieces_left
+			self.pieces_points = self.last_move.pieces_points
+		else:
+			self.pieces_left = {'Q':(1,1), 'R':(2,2),
+								'N':(2,2), 'B':(2,2), 'P':(8,8)}
+			self.pieces_points = (39, 39)
+		pc_value = {'Q':9, 'R':5, 'N':3, 'B':3, 'P':1}
+		if 
+		self.queening = None		
+	}
+	# Amount of Each Piece Left; Total Piece (Material) Points; Queening
+	
+
+	
+	pc_lost_kind = move['capture'][-1]
+
+	if move['capture'].startswith('b'):
+		move['b_pieces_left'][pc_lost_kind] -= 1
+		move['b_piece_pts'] -= pc_value[pc_lost_kind]
+	elif move['capture'].startswith('w'):
+		move['w_pieces_left'][pc_lost_kind] -= 1
+		move['w_piece_pts'] -= pc_value[pc_lost_kind]
+	
+	move['queening'] = (
+			(move['to_y']==0 or move['to_y']==7) and\
+			(move['piece_kind']=='P'))
+	if move['queening'] and move['colour']=='b':
+		move['b_pieces_left'][pc_lost_kind] += 1
+		move['b_piece_pts'] += 9
+	elif move['queening'] and move['colour']=='w':
+		move['w_pieces_left']['Q'] += 1
+		move['w_piece_pts'] += 9
 
 
 
 
-# ---FUNCTIONS: DRAWING TO SCREEN & WINDOW OPTIONS---
+
+# ---CONVERSIONS---------------------------------------------------------------
+def to_file_rank(column_row):
+	# <int list> {0,1,..,7}{0,1,..,7}   -->   <str>  {a,b,..,h}{1,2,..,8}
+	file_rank = chr(97 + column_row[0]) + str(8 - column_row[1])
+	return file_rank
+
+def to_column_row(file_rank):
+	# <str>  {a,b,..,h}{1,2,..,8}   -->   <int list> {0,1,..,7}{0,1,..,7}
+	column_row = [ord(file_rank[0]) - 97, int(file_rank[1]) - 1]
+	return column_row
+
+def to_move_coord(click_coord):
+	return ((click_coord[0]-100)//SQ_SIZE, (click_coord[1]-200)//SQ_SIZE)
+	
+def swap(turn):
+	if colour == 'w':
+		return 'b'
+	else:
+		return 'w'
+
+def to_algebraic(move):
+	# <dict>    -->    <str> in alegraic notation, like exd4+ f8=Q#
+	# If not Castles; append one character to notation string one at a time
+	if move['is_castle_ks']:
+		return 'O-O'
+	elif move['is_castle_qs']:
+		return 'O-O-O'
+	
+	move_return = ''
+	if move['piece_kind']=='P' and move['capture']!='  ':
+		# If Pawn Capture, use letter of sq it came from; otherwise, drop the P
+		origin_sq = str(to_file_rank([move['from_x'], move['from_y']]))[0]
+		move_return += origin_sq
+	elif move['piece_kind']!='P':
+		move_return += move['piece_kind']
+	
+	if move['capture'] != '  ':
+		move_return += 'x'
+
+	destination_sq = str(to_file_rank([move['to_x'], move['to_y']]))
+	move_return += destination_sq
+	
+	if move['queening']:
+		move_return += '=Q'
+
+	if move['is_checkmate']:
+		move_return += '#'
+	elif move['is_stalemate']:
+		move_return += '$'
+	elif move['is_check']:
+		move_return += '+'
+
+	return move_return
+
+
+
+
+
+# ---DRAW ON SCREEN---------------------------------------------------------
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
 	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB', 'bP',
@@ -123,10 +321,10 @@ def draw_chessboard(screen):
 					(100 + j*SQ_SIZE, 200 + i*SQ_SIZE, SQ_SIZE, SQ_SIZE))
 	for i in range(8):
 		# Draw digits 1-8 along side
-		digits = coord_font.render(('{}'.format(i+1)), False, BLACK)
+		digits = FONT_COORD.render(('{}'.format(i+1)), False, BLACK)
 		screen.blit(digits, (88, 568 - 50*i))
 		# Draw letters A-H (ASCII characters 65-72) along bottom
-		letters = coord_font.render(('{}'.format(chr(65+i))), False, BLACK)
+		letters = FONT_COORD.render(('{}'.format(chr(65+i))), False, BLACK)
 		screen.blit(letters, (122 + 50*i, 604))
 
 def draw_pieces(screen, board):
@@ -136,54 +334,71 @@ def draw_pieces(screen, board):
 				pc = board[i][j]
 				screen.blit(PIECE_IMG[pc],(100 + j*SQ_SIZE, 200 + i*SQ_SIZE))
 
-def highlight_sq(screen, sq, colour):
-	# Draw red square 3 pixels thick by connecting the four points
+def highlight_sq(screen, colour, point):
+	# Draw red square 3 pixels thick starting on given point, p
 	if colour == 'w':
 		turn_col = WHITE
 	else:
 		turn_col = BLACK
-	pg.draw.lines(screen, turn_col, True, [(100+sq[0]*50, 200+sq[1]*50),\
-								      	   (150+sq[0]*50, 200+sq[1]*50),\
-								           (150+sq[0]*50, 250+sq[1]*50),\
-								           (100+sq[0]*50, 250+sq[1]*50)], 3)
-
-def terminate():
-	pg.quit()
-	sys.exit()
-
-def game_over():
-	print('Game Over.')
+	pg.draw.lines(screen, turn_col, True, [(100 + p[0]*50, 200 + p[1]*50),\
+								      	   (150 + p[0]*50, 200 + p[1]*50),\
+								           (150 + p[0]*50, 250 + p[1]*50),\
+								           (100 + p[0]*50, 250 + p[1]*50)], 3)
 
 
 
 
-# ---FUNCTIONS: CONVERSIONS---
-def cr_fr(cr):
-	# Convert column-row notation to file-rank notation
-	# Expects int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
-	# Returns str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
-	fr = chr(97 + cr[0]) + str(8 - cr[1])
-	return (fr)
+# ---PRINT TO SHELL------------------------------------------------------------
+def print_new_game():
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('*'*70 + '\n' + ' '*32 + 'NEW GAME' + '\n' + '*'*70)
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
 
-def fr_cr(fr):
-	# Convert file-rank notation to column-row notation
-	# Expects str 'fr' where file (f) = {a,b,..,h}; rank (r) = {1,2,..,8}
-	# Returns int list 'cr' where cr[0] = {0,1,..,7}; cr[1] = {0,1,..,7}
-	cr = [ord(fr[0]) - 97, int(fr[1]) - 1]
-	return cr
+def print_move_list(moves):
+	# First, convert moves list to algebraic chess notation, one move at a time
+	move_list = []
+	for i in range(len(moves)):
+		new_move = to_algebraic(moves[i])
+		move_list.append(new_move)
+	# Print out with offset compensation, so moves show up in straight columns
+	print('   ---Move List---')
+	for i in range(len(move_list)):
+		offset = 5 - len(move_list[i])
+		if i % 2 == 0:
+			if int((i+3)/2) < 10:
+				print(end=' ')  # Extra space before one-digit numbers
+			print(str(int((i+3)/2)), '.  ', move_list[i], ' '*offset, end=' ')
+		else:
+			print(move_list[i])
+	print('\n\n')
+	
+def print_last_move(last_move):
+	# Print out each move 'attribute' on own line (extra spaces around np.arrays)
+	print('   ---Last Move\'s Info---')
+	for key in last_move:
+		if isinstance(last_move[key], np.ndarray):
+			print(key, ' = \n', last_move[key], '\n')
+		else:
+			print(key, ' = ', last_move[key])
+	print('\n\n')
 
-def swap_col(colour):
-	if colour == 'w':
-		return 'b'
-	else:
-		return 'w'
 
 
 
 
-# ---FUNCTIONS: MAIN LOGIC FUNCTIONS---
-def is_valid_move(board, colour, move, move_log):
-	# Rename all coordinate-related variable names
+
+
+
+
+
+
+
+
+
+
+	
+def is_move_valid(board, moves, new_move):
 	from_x = move[0]
 	from_y = move[1]
 	to_x = move[2]
@@ -193,19 +408,9 @@ def is_valid_move(board, colour, move, move_log):
 	x_direction = -1 if x_diff < 0 else 1
 	y_direction = -1 if y_diff < 0 else 1
 
-	# Rename all piece-related variable names
 	piece = board[from_y, from_x]
 	piece_colour = board[from_y, from_x][0]
 	piece_kind = board[from_y, from_x][-1]
-
-	# --- CHECK #1: check if 'to' and 'from' squares are the same.
-	# --- CHECK #2: check if trying to move wrong coloured piece.
-	# --- CHECK #3: check if trying to capture own piece.
-	if (
-			(from_x==to_x and from_y==to_y) or\
-			(colour != piece_colour) or\
-			(colour == board[to_y, to_x][0])):
-		return False
 
 	# --- CHECK #4: check if this is proper move for the piece to make.
 	proper_move = False
@@ -229,16 +434,16 @@ def is_valid_move(board, colour, move, move_log):
 				board[to_y, to_x].startswith('b'))
 			):
 		proper_move = True
-	elif piece=='wP' and move_log and (	
+	elif piece=='wP' and moves and (	
 				# Capture en passant
 				# (Only possible after at least one move has been made)
 				from_y == 3 and
 				to_y == 2 and
 				abs(x_diff) == 1 and
-				move_log[-1]['piece'] == 'bP' and
-				move_log[-1]['from_y'] == 1 and
-				move_log[-1]['to_y'] == 3 and
-				abs(move_log[-1]['to_x'] - from_x) == 1):
+				moves[-1]['piece'] == 'bP' and
+				moves[-1]['from_y'] == 1 and
+				moves[-1]['to_y'] == 3 and
+				abs(moves[-1]['to_x'] - from_x) == 1):
 		proper_move = True
 	elif piece=='bP' and (
 			(
@@ -260,16 +465,16 @@ def is_valid_move(board, colour, move, move_log):
 				board[to_y, to_x].startswith('w'))
 			):
 		proper_move = True
-	elif piece=='bP' and move_log and (
+	elif piece=='bP' and moves and (
 				# Capture en passant
 				# (Only possible after at least one move has been made)
 				from_y == 4 and
 				to_y == 5 and
 				abs(x_diff) == 1 and
-				move_log[-1]['piece'] == 'wP' and
-				move_log[-1]['from_y'] == 6 and
-				move_log[-1]['to_y'] == 4 and
-				abs(move_log[-1]['to_x'] - from_x) == 1):
+				moves[-1]['piece'] == 'wP' and
+				moves[-1]['from_y'] == 6 and
+				moves[-1]['to_y'] == 4 and
+				abs(moves[-1]['to_x'] - from_x) == 1):
 		proper_move = True
 	if piece_kind=='N':
 			if (	(abs(x_diff)==2 and abs(y_diff)==1) or
@@ -297,7 +502,7 @@ def is_valid_move(board, colour, move, move_log):
 					proper_move = False
 		else:
 			proper_move = False
-	elif piece_kind=='Q' and move_log:
+	elif piece_kind=='Q' and moves:
 		# Check for any pieces along the way for 3 cases:
 		# horizontal move (y_diff is 0), vertical move (x_diff is 0),
 		# and diagonal move (absolute values of x_diff & y_diff are equal) 
@@ -317,11 +522,15 @@ def is_valid_move(board, colour, move, move_log):
 						proper_move = False
 		else:
 			proper_move = False
-	elif piece_kind=='K' and move_log:
+	elif piece_kind=='K' and moves:
+		# All of the following conditions must be met:
+		# 1) movement of 1 square in any direction, or 2 to side when castling
+		# 2) not walking into opponent king
 		proper_move = (
 			(abs(y_diff)<=1 and abs(x_diff)<=1) or\
-			((not move_log[-1]['lost_castle_ks']) and x_diff==2) or\
-			((not move_log[-1]['lost_castle_qs']) and x_diff==-2))
+			((not moves[-1]['lost_castle_ks']) and x_diff==2) or\
+			((not moves[-1]['lost_castle_qs']) and x_diff==-2))
+		if proper_move == False:
 
 	if proper_move == False:
 		return False
@@ -329,40 +538,26 @@ def is_valid_move(board, colour, move, move_log):
 
 	# --- CHECK #5: check if this move would move the king into check
 	hypothetical_board = move_piece(board, move)
-	would_be_check = is_check(hypothetical_board, swap_col(colour), move_log)
+	would_be_check = is_check(hypothetical_board, swap(colour), moves)
 	if would_be_check:
 		return False
 
 	return True	
 
 
-def does_valid_move_exist(board, colour, move_log):
-	# Given a position, check all possible moves for all of given colour's pieces
+def any_valid_moves_left(board, colour, moves):
 	for i in range(8):
 		for j in range(8):
 			if board[i, j][0] == colour:
 				for x in range(8):
 					for y in range(8):
 						valid_move = is_valid_move(
-							board, colour, [j, i, y, x], move_log)
+							board, colour, [j, i, y, x], moves)
 						if valid_move:
 							return True
 	return False
 
 
-def is_check(board, colour, move_log):
-	# Given a position, check if this colour is currently giving check
-	opp_king = np.where(board == (str(swap_col(colour))+'K'))
-	in_check = False
-	for i in range(8):
-	   	for j in range(8):
-	   		if board[i, j][0] == colour:
-	   			# Test if any pieces threatening to capture opponent's king
-	   			move = [j, i, opp_king[1].item(), opp_king[0].item()]
-	   			can_capture = is_valid_move(board, colour, move, move_log)
-	   			if can_capture:
-	   				in_check = True
-	return in_check
 
 
 def move_piece(board, move_coord):
@@ -407,256 +602,156 @@ def move_piece(board, move_coord):
 
 
 
-# ---FUNCTIONS: MOVE LOG & NOTATION---
-def get_move_info(current_board, colour, move_coord, move_log):
-	# move = New 'Move Log' entry
-	move = {
-		# Based on passed in information...
-		'colour': colour,
-		'piece': current_board[move_coord[1], move_coord[0]],
-		'piece_colour': current_board[move_coord[1], move_coord[0]][0],
-		'piece_kind': current_board[move_coord[1], move_coord[0]][-1],
-		'from_x': move_coord[0],
-		'from_y': move_coord[1],
-		'to_x': move_coord[2],
-		'to_y': move_coord[3],
-		'moving_x': (move_coord[0] - move_coord[2]),
-		'moving_y': (move_coord[1] - move_coord[3]),
-		'capture': current_board[move_coord[3], move_coord[2]],
-		'board_before_move': current_board,
-		
-		# To be calculated...
-		'board_after_move': [],
-		'opp_has_moves': None,
-		'move_num': None,
-		'ply_num': None,
-		'is_check': None,
-		'is_stalemate': None,
-		'is_checkmate': None,
-		'lost_castle_qs': False,
-		'lost_castle_ks': False,
-		'is_castle_qs': False,
-		'is_castle_ks': False,
-		'is_en_passant': None,
-		'b_pieces_left': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8},
-		'w_pieces_left': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8},
-		'b_piece_pts': 39,
-		'w_piece_pts': 39,
-		'queening': None,
-		'insuff_material': None
-	}
 
-	# For easier use within function
-	if move_log:
-		last_move = move_log[-1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ---FUNCTIONS: CLICK EVENT----------------------------------------------------
+def is_click_valid(click_coord):
+	if not ((click_coord[0] < 100 or click_coord[0] >= 500) or\
+	   		(click_coord[1] < 200 or click_coord[1] >= 600)):
+		return True
 	else:
-		last_move = None
+		return False
 
 
-	# New Board Game State; Whether Opponent Has Any Valid Moves Next Turn
-	move['board_after_move'] = move_piece(current_board, move_coord)
-	if not last_move:
-		move['opp_has_moves'] = True
-	else:
-		move['opp_has_moves'] = does_valid_move_exist(move['board_after_move'],
-												      swap_col(colour),
-												      move_log)
-
-	# Move Number; Ply Number
-	if not last_move:
-		move['ply_num'] = 1
-	else:
-		move['ply_num'] = last_move['ply_num'] + 1
-	move['move_num'] = int(move['ply_num']/2 + 0.5)
-
-
-	
-	
-
-	# Is Check; Is Checkmate; Is Stalemate
-	move['is_check'] = is_check(move['board_after_move'], colour, move_log)
-	move['is_checkmate'] = move['is_check'] and\
-						   not move['opp_has_moves']
-	move['is_stalemate'] = not move['is_check'] and\
-						   not move['opp_has_moves']
-	
-
-	# Is En Passant; Castling Rights
-	if len(move_log) > 2:
-		print(move_log[-2]['ply_num'], ' <--> ', move['ply_num'])
-		# Carry over state from last move (2 plies) starting on move 3
-		move['lost_castle_qs'] = move_log[-2]['lost_castle_qs']
-		move['lost_castle_ks'] = move_log[-2]['lost_castle_ks']
-		move['is_en_passant'] = ((move['piece_kind'] == ('P')) and\
-							     (abs(move['moving_x']) == 1) and\
-							     (move['capture'] == '  '))
+def is_move_ok(board, colour, move_coord):
+	# Basic validations done first:  1. 'to' and 'from' not same square
+	#								 2. trying to move wrong piece
+	# 								 3. trying to move onto own piece
+	from_x, from_y, to_x, to_y = move_coord
 	if (
-			(move['piece_kind']==('R') and move['from_x']==0) or\
-			(move['piece_kind']==('K'))):
-		move['lost_castle_qs'] = True
-	if (
-			(move['piece_kind']==('R') and move['from_x']==7) or\
-			(move['piece_kind']==('K'))):
-		move['lost_castle_ks'] = True
+			(from_x, to_x) == (to_x, to_y)) or\
+			(colour != board[from_y][from_x]) or\
+			(colour == board[to_y, to_x][0])
+			):
+		return False
 
 
-	# Castling
-	move['is_castle_qs'] = (
-			(move['piece_kind']==('K') and move['moving_x']==2) and\
-			(not move['lost_castle_qs']))
-	move['is_castle_ks'] = (
-			(move['piece_kind']==('K') and move['moving_x']==-2) and\
-			(not move['lost_castle_ks']))
-	if move['is_castle_qs'] or move['is_castle_ks']:
-		move['lost_castle_qs'] = True
-		move['lost_castle_ks'] = True
-	
-	
-	# Amount of Each Piece Left; Total Piece (Material) Points; Queening
-	if last_move:
-		move['b_pieces_left'] = last_move['b_pieces_left']
-		move['w_pieces_left'] = last_move['w_pieces_left']
-		move['b_piece_pts'] = last_move['b_piece_pts']
-		move['w_piece_pts'] = last_move['w_piece_pts']
-	
-	pc_value = {'Q':9, 'R':5, 'N':3, 'B':3, 'P':1}
-	pc_lost_kind = move['capture'][-1]
+# ---GAME OVER-----------------------------------------------------------------
+def is_game_over(moves):
+	# Checkmate, stalemate, or both sides have insufficient material
+	if moves[-1]['is_checkmate']:
+		return 'Checkmate!'
+	elif moves[-1]['is_stalemate']:
+		return 'Stalemate!'
+	elif moves[-1]['insuff_mat'] and moves[-2]['insuff_mat']:
+		return 'Both sides have insufficient material!'
+	return ''
 
-	if move['capture'].startswith('b'):
-		move['b_pieces_left'][pc_lost_kind] -= 1
-		move['b_piece_pts'] -= pc_value[pc_lost_kind]
-	elif move['capture'].startswith('w'):
-		move['w_pieces_left'][pc_lost_kind] -= 1
-		move['w_piece_pts'] -= pc_value[pc_lost_kind]
-	
-	move['queening'] = (
-			(move['to_y']==0 or move['to_y']==7) and\
-			(move['piece_kind']=='P'))
-	if move['queening'] and move['colour']=='b':
-		move['b_pieces_left'][pc_lost_kind] += 1
-		move['b_piece_pts'] += 9
-	elif move['queening'] and move['colour']=='w':
-		move['w_pieces_left']['Q'] += 1
-		move['w_piece_pts'] += 9
+def game_over(message):
+	print(message, ' Game Over.')
 
+def terminate():
+	pg.quit()
+	sys.exit()
 
-	# Insufficient Material to Checkmate Anymore
-	move['insuff_material'] = (
-			(move['colour']=='b' and move['b_piece_pts'] < 10) or\
-			(move['colour']=='w' and move['w_piece_pts'] < 10))
-
-	return move
-
-
-def get_move_algebraic(move):
-	# If castles, return special notation
-	if move['is_castle_ks']:
-		return 'O-O'
-	elif move['is_castle_qs']:
-		return 'O-O-O'
-	
-	# If pawn is capturing, use letter of sq it came from; otherwise, drop the P
-	move_return = ''
-	if move['piece_kind']=='P' and move['capture']!='  ':
-		move_return += str(cr_fr([move['from_x'], move['from_y']]))[0]
-	elif move['piece_kind']!='P':
-		move_return += move['piece_kind']
-
-	if move['capture'] != '  ':
-		move_return += 'x'
-
-	# Destination square
-	move_return += str(cr_fr([move['to_x'], move['to_y']]))
-
-	if move['queening']:
-		move_return += '=Q'
-
-	if move['is_checkmate']:
-		move_return += '#'
-	elif move['is_stalemate']:
-		move_return += '$'
-	elif move['is_check']:
-		move_return += '+'
-
-	return move_return
-	
-
-
-def print_move_list(move_log):
-	# Convert move_log to list of moves in algebraic chess notation
-	move_list = []
-	for i in range(1, len(move_log)):
-		new_move = get_move_algebraic(move_log[i])
-		move_list.append(new_move)
-		
-	print('---Move List---')
-	for i in range(0, len(move_list), 2):
-		offset = 7 - len(move_list[i])
-		if i == (len(move_list) - 1):
-			print(move_list[i])
-		else:
-			print(move_list[i], ' '*offset, move_list[i+1])
-			
-		
-
-
-
-
-# ---MAIN GAME LOOP---
+# ---MAIN GAME LOOP------------------------------------------------------------
 def main():
 	gs = GameState()
 	load_images()
-	clk = ()
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('*'*70 + '\n' + ' '*32 + 'NEW GAME' + '\n' + '*'*70)
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	while True:
+	print_new_game()
+	while:
 		win.fill(GREEN)
 		draw_chessboard(win)
 		draw_pieces(win, gs.board)
-		if clk:
-			# Move 3 onwards (ply = 5+), check for the 3 game over scenarios:
-			# Checkmate; stalemate; both sides have insufficient material
-			if len(gs.move_log) >= 5 and (
-					(gs.move_log[-1]['is_checkmate']) or\
-					(gs.move_log[-1]['is_stalemate']) or\
-					(
-						(gs.move_log[-1]['insuff_material']) and\
-						(gs.move_log[-2]['insuff_material']))
-					):
-				game_over()
-			elif clk[0] < 100 or clk[0] >= 500 or clk[1] < 200 or clk[1] >= 600:
-				gs.move_coord = [] # Click is out of bounds: reset list of coordinates
-			elif len(gs.move_coord) < 4:
-				gs.move_coord.append((clk[0]-100) // SQ_SIZE)
-				gs.move_coord.append((clk[1]-200) // SQ_SIZE)
-				if len(gs.move_coord) == 4:
-					valid_move = is_valid_move(
-							gs.board, gs.colour, gs.move_coord, gs.move_log)
-					if valid_move:
-						new_move_info = get_move_info(
-							gs.board, gs.colour, gs.move_coord, gs.move_log)
-						gs.move_log.append(new_move_info)
-						gs.board = move_piece(gs.board, gs.move_coord)
-						gs.move_coord = []
-						gs.colour = swap_col(gs.colour)
-					else:
-						# Promote old 'to' square to new 'from' square
-						gs.move_coord[0] = gs.move_coord[2]
-						gs.move_coord[1] = gs.move_coord[3]
-						del gs.move_coord[2:]
-			clk = ()
-		if (	
-				(len(gs.move_coord) == 2) and\
-				(gs.board[gs.move_coord[1]][gs.move_coord[0]].startswith(gs.colour))):
-			# Piece is selected and it's that colour's turn to move)
-			highlight_sq(win, gs.move_coord, gs.colour)		
+		# From third move (ply = 5) onwards, check if game is over
+		if gs.moves > 5:
+			game_over_notice = is_game_over(gs.moves)
+			if not game_over_notice.empty():
+				game_over(game_over_notice)
 
+		# For every registered click:
+		# Check if click valid --> Check if move valid --> Make move
+		if clicked:
+			click valid = is_click_valid(gs.click_coord)
+			if click_valid:
+				gs.move_coord = to_move_coord(gs.click_coord)
+				if len(gs.move_coord) < 4:
+					# If a piece is selected and it's that colour to move)
+					if ((len(gs.move_coord) == 2) and\
+					    (gs.board[gs.move_coord[1]][gs.move_coord[0]]\
+								.startswith(gs.turn))):
+						highlight_sq(win, gs.turn, gs.move_coord)
+				elif len(gs.move_coord) == 4:
+					move_ok = is_move_ok(gs.board, gs.turn, gs.move_coord)
+					gs.new_move = get_move_info(gs.board,
+												gs.turn,
+												gs.moves,
+												gs.move_coord)
+					move_valid = is_move_valid(gs.board, gs.moves, gs.new_move)
+				if move_valid:
+					gs.board = move_piece(gs.board, gs.move_coord)
+					gs.moves.append(gs.new_move)
+					gs.move_coord = []
+					gs.turn = swap(gs.turn)
+				else:
+					# Promote old 'to' square to become new 'from' square
+					gs.move_coord[0] = gs.move_coord[2]
+					gs.move_coord[1] = gs.move_coord[3]
+					del gs.move_coord[2:]
+		else:
+			# Reset click variables once nothing left to do with them
+			gs.click_coord = []
+			clicked = ()
+
+
+		# ---EVENTS---
 		event = pg.event.get()
 		for e in event:
 			if e.type == MOUSEBUTTONDOWN:
-				clk = e.pos
+				clicked = e.pos
 			if e.type == QUIT:
 				terminate()
 			if e.type == KEYDOWN:
@@ -665,20 +760,17 @@ def main():
 				# ------KEYS---------------
 				#   b = Print [B]oard state
 				#   m = [M]ove Information
+				#   l = [L]ist of Moves
 				#   t = [T]esting
 				#   q = [Q]uit
 				if e.key == K_b:
 					print('\n' + str(gs.board) + '\n')
-				if e.key == K_m and gs.move_log:
-					print('\n\n')
-					for key in gs.move_log[-1]:
-						if str(gs.move_log[-1][key]).startswith('board'):
-							print(key, ' = \n', gs.move_log[-1][key])
-						else:
-							print(key, ' = ', gs.move_log[-1][key])
-					print('\n')
-				if e.key == K_t and gs.move_log:
-					print_move_list(gs.move_log)
+				if e.key == K_m and gs.moves:
+					print_last_move(gs.moves[-1])
+				if e.key == K_l and gs.moves:
+					print_move_list(gs.moves)
+				if e.key == K_t:
+					pass
 				if e.key == K_ESCAPE or e.key == K_q:
 					terminate()
 
