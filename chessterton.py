@@ -42,7 +42,8 @@
 # 16.08.20 get_move_info; notation displayed in shell by pressing b (glitchy)
 # 17.08.20 fixed glitch with check, checkmate, and stalemate recognition
 # 17.08.20 added right-side section to window; move_log to include more specific move traits; castling
-# 19.08.20 major redesign - Move() & GameState() classes re-defining (in progress)
+# 19.08.20 major redesign - Move(), GameState(), check_if_check re-defining (in progress)
+# 19.08.20 major redesign finished; about to start debugging
 
 
 # ---IMPORTS---
@@ -97,147 +98,279 @@ class GameState():
 		self.is_checkmate = False
 		self.is_stalemate = False
 		self.is_insuff_material = False
-		self.click_coord = [] # Click's coordinates [x, y]
-		self.move_coord = []  # Move's coordinates [from-x, from-y, to-x, to-y]
+		self.pieces_left = {'w': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8},
+						   {'b': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8}}}
+		self.pieces_points = {'w': 39, 'b': 39}
+		self.click_xy = [] # Click's pixel location coordinates [x, y]
+		self.move_xy = []  # Move's coordinates [from-x, from-y, to-x, to-y]
 		self.moves = []
 
 
+		def is_click_valid(self):
+			return if not ((self.click_xy[0] < 100 or self.click_xy[0] >= 500) or
+	   					   (self.click_xy[1] < 200 or self.click_xy[1] >= 600))
+
+		def is_game_over(self):
+			# Checkmate, stalemate, or both sides have insufficient material
+			if gs.is_checkmate:
+				return 'Checkmate!'
+			elif gs.is_stalemate:
+				return 'Stalemate!'
+			elif (gs.piece_points['w']) < 1 and (gs.piece_points['b']) < 1:
+				return 'Both sides have insufficient material!'
+			return ''
+
+		def is_move_possible(self):
+			for piece in gs.board:
+				if piece.startswith(gs.is_turn):
+					piece_xy = np.where(self.board == piece)
+					# for now, check if that piece can move to any of the 64 squares.
+					# later, to be optimized for that piece_kind's possible squares.
+					for i in range(8):
+						for j in range(8):
+							move_xy = [piece_xy[1].item(),
+									   piece_xy[0].item(),
+									   j, i]
+							hypothetical_gs = GameState()
+							hypothetical_move = Move(gs, move_xy)
+							if hypothetical_move.valid:
+								return True
+			return False
+
+		def make_move(self, new_move):
+			update_board(self, new_move)
+			self.board = new_move.board_after
+			self.on_move += 1
+			self.is_turn = swap(self.is_turn) 
+			self.is_check = new_move.check
+			self.is_checkmate = new_move.checkmate
+			self.is_stalemate = new_move.stalemate
+			self.pieces_left = new_move.pieces_left
+			self.pieces_points = new_move.pieces_points
+			self.moves.append(self.new_move)
+			self.click_xy = []
+			self.move_xy = []
+
+		def change_sq_sel(self, move_xy):
+			# Demote 'to' square to be the new 'from' square
+			gs.move_xy[0] = gs.move_xy[2]
+			gs.move_xy[1] = gs.move_xy[3]
+			del gs.move_xy[2:]
+
+
+
 class Move():
-	def __init__(self, gs, mc):
-	# Takes GameState() object and move coord list [from-x, from-y, to-x, to-y]
+	def __init__(self, gs, move_xy):
+		# Takes: GameState() object, move coord list [from-x, from-y, to-x, to-y]
 		# General Move Information
 		self.move_num = gs.on_move
 		self.ply_num = int((self.move_num + 1) / 2)
-		self.last_move = [gs.moves[-1] if (not self.move_num == 1) else None
+		self.last_move = [gs.moves[-1] if (not self.move_num == 1) else None]
+		self.prev_turn = [gs.moves[-2] if (not self.move_num == 1) else None]
 		self.turn = gs.is_turn
 
 		# Location on Board Information
-		self.from_x = mc[0]
-		self.from_y = mc[1]
-		self.to_x = mc[2]
-		self.to_y = mc[3]
+		self.from_x = move_xy[0]
+		self.from_y = move_xy[1]
+		self.to_x = move_xy[2]
+		self.to_y = move_xy[3]
 		self.x_diff = self.to_x - self.from_x
 		self.y_diff = self.to_y - self.from_y
-		self.x_direction = -1 if x_diff < 0 else 1
-		self.y_direction = -1 if x_diff < 0 else 1
+		self.x_direction = -1 if self.x_diff < 0 else 1
+		self.y_direction = -1 if self.x_diff < 0 else 1
 
 		# Piece Information
-		self.piece = self.board[self.from_y, self.from_x]
+		self.piece = gs.board[self.from_y, self.from_x]
 		self.piece_kind = self.piece[1]
 		self.piece_colour = self.piece[0]
+		self.on_dest_sq = gs.board[to_y, to_x]
 		
-		# Special Move Attributes
-		self.is_capture = self.board[self.to_y, self.to_x]
+		# Move Validation & Special Move Attributes
+		self.capture = self.on_dest_sq != '  '
+		if self.piece_kind == 'P':
+			self.valid = (
+				((self.piece_colour == 'w' and self.y_dir == -1) or
+			     (self.piece_colour == 'b' and self.y_dir == 1)) and
+				x_diff == 0 or (x_diff == 1 and y_diff == 1))
+			self.queening = (self.y_to == 0 or self.y_to == 7)
+			if self.move_num > 3 and (
+					(self.last_move.double_pawn_push) and
+					(self.last_move.to_y == self.to_y)
+					):
+				self.capture = True
+				self.en_passant = True		
+		elif self.piece_kind == 'N':
+			self.valid = ((abs(self.x_diff) == 2 and abs(self.y_diff) == 1) or
+						  (abs(self.x_diff) == 1 and abs(self.y_diff) == 2))
 		
-		self.is_double_pawn_push = ((self.piece_kind == 'P') and\
-								    (self.x_diff == 2) and\
-								    (abs(self.y_diff) == 2) and\
-								    (self.from_y == 1 or self.from_y == 6))
-
-		self.is_check = check_if_check()
-
-
-		self.valid_moves_left = does_valid_move_exist(self.board_after,            ####################
-												   swap(self.turn),			# moves need to be sent?
-												   game_state.moves)			# maybe only .last_move needed?
+		elif self.piece_kind == 'B':
+			self.valid = (abs(self.x_diff) == abs(self.y_diff))
+			# Check for obstacles. If x_diff or y_diff < 0, step direction set
+			# to -1 and start at -1 (so we don't check origin square at i = 0)
+			for row in range(self.x_dir, self.x_diff, self.x_dir):
+				for col in range(self.y_dir, self.y_diff, self.y_dir):
+					sq_along_way = self.board[self.from_y + r, self.from_x + c]
+					if abs(r) == abs(c) and sq_along_way != '  ':
+						self.valid = False
 		
-		self.opp_king = np.where(self.board == (str(swap(self.turn))+'K'))
-		for i in range(8):
-	   		for j in range(8):
-	   			if board[i, j][0] == self.turn:
-	   			
-	   			move = [j, i, opp_king[1].item(), opp_king[0].item()]
-	   			can_capture = is_valid_move(board, colour, move, moves)
-	   			self.is_check = True
-
-
-
-		self.stalemate = not self.valid_moves_left and not self.check
-		self.checkmate = not self.valid_moves_left and self.check
-
-		if (
-				(len(game_state.moves) > 3) and\
-				(self.piece_kind == 'P') and\
-				(abs(self.x_diff) == 1) and\
-				(self.capture == '  ') and\
-				(self.last_move.double_pawn_push) and\
-				(abs(self.last_move.x_to - self.x_to) == 1)\
-				(self.last_move.y_to == self.y_to)
-				):
-			self.is_en_passant = True
-		else:
-			self.is_en_passant = False
-
-
-		if len(game_state.moves) > 2:
-			self.lost_castle_qs = self.prev_turn.lost_castle_qs
-			self.lost_castle_ks = self.prev_turn.lost_castle_ks
-		else:
-			self.lost_castle_qs = False
-			self.lost_castle_ks = False
-			if self.piece_kind == 'K':
-				self.lost_castle_qs = True
-				self.lost_castle_ks = True
-			elif self.piece_kind == 'R' and self.from_x == 0:
-				self.lost_castle_qs = True
-			elif self.piece_kind == 'R' and self.from_x == 7:
-				self.lost_castle_ks = True	
+		elif self.piece_kind == 'R':
+			self.valid = (self.y_diff == 0 or self.x_diff == 0)
+			if self.y_diff == 0:
+				for c in range(self.x_dir, self.x_diff, self.x_dir):
+					if self.board[self.from_y, self.from_x + c] != '  ':
+						self.valid = False
+			elif self.x_diff == 0:
+				for r in range(self.y_dir, self.y_diff, self.y_dir):
+					if self.board[self.from_y + r, self.from_x] != '  ':
+						self.valid = False
+			else:
+				self.is_valid = True
+			self.cant_castle_qs = (self.from_x == 0)
+			self.cant_castle_ks = (self.from_x == 7)
 		
-		self.is_castle_qs = False
-		self.is_castle_ks = False
-		if (
-				(len(game_state.moves) > 6) and\
-				(self.piece_kind == 'K') and\
-				(self.y_diff == 0) and\
-				(self.x_diff == 2)
-				):
+		elif self.piece_kind == 'Q':
+			# Check for obstacles for all 3 cases: horizontal move, vertical move,
+			# and diagonal move (where absolutes of x_diff & y_diff are equal)
+			if self.y_diff == 0:
+				for c in range(self.x_dir, self.x_diff, self.x_dir):
+					if self.board[self.from_y, self.from_x + c] != '  ':
+						self.valid = False
+			elif self.x_diff == 0:
+				for r in range(self.y_dir, self.y_diff, self.y_dir):
+					if self.board[self.from_y + r, self.from_x] != '  ':
+						self.valid = False
+			elif abs(self.x_diff) == abs(self.y_diff):
+				for c in range(self.x_dir, self.x_diff, self.x_dir):
+					for r in range(self.y_dir, self.y_diff, self.y_dir):
+						if abs(r) == abs(c):
+							if self.board[self.from_y + r, self.from_x + c]!= '  ':
+						 		self.valid = False
+			else:
+				self.valid = True
+		
+		elif self.piece_kind == 'K':
+			self.valid = (abs(self.x_diff) < 2 and abs(self.y_diff) < 2)
+			# Castling (only possible after 6th ply)
 			if (
-					(not self.last_move.lost_castle_qs) and\
-					(self.x_direction == -1) and\
-					(self.board[self.from_y][(self.from_x - 1)] == ' ') and\
-					(self.board[self.from_y][(self.from_x - 2)] == ' ') and\
-					(self.board[self.from_y][(self.from_x - 3)] == ' ')):
-				self.is_castle_qs = True
-			elif (
-					(not self.last_move.lost_castle_ks) and\
-					(self.x_direction == 1) and\
-					(self.board[self.from_y][(self.from_x + 1)] == ' ') and\
-					(self.board[self.from_y][(self.from_x + 2)] == ' ')):
-				self.is_castle_ks = True
+					(self.move_num > 6) and
+					(abs(self.x_diff) == 2 and self.y_diff == 0)
+					):
+				if (
+						(self.x_dir == -1) and
+			   			(not self.prev_turn.cant_castle_qs) and
+			   			(self.board[self.to_y, self.to_x - 1] == '  ') and
+			   			(self.board[self.to_y, self.to_x - 2] == '  ') and
+			   			(self.board[self.to_y, self.to_x - 3] == '  ')
+			   			):
+					self.castle_qs = True
+					self.valid = True
+				elif (
+						(self.x_dir == 1) and
+						(not self.prev_turn.cant_castle_ks) and
+			   			(self.board[self.to_y, self.to_x + 1] == '  ') and
+			   			(self.board[self.to_y, self.to_x + 2] == '  ')
+			   			):
+					self.castle_ks = True
+					self.valid = True
+			else:
+				self.castle_qs = False
+				self.castle_ks = False
 
-		if self.prev_turn:
-			self.pieces_left = self.last_move.pieces_left
-			self.pieces_points = self.last_move.pieces_points
+			if self.move_num > 2:
+				self.cant_castle_qs = ((self.prev_turn.cant_castle_qs) or
+								   	   (self.castle_qs) or
+								       (self.castle_ks))
+				self.cant_castle_ks = ((self.prev_turn.cant_castle_ks) or
+								       (self.castle_qs) or
+								       (self.castle_ks))
+			else:
+				self.cant_castle_qs = False
+				self.cant_castle_ks = False
+
 		else:
-			self.pieces_left = {'Q':(1,1), 'R':(2,2),
-								'N':(2,2), 'B':(2,2), 'P':(8,8)}
-			self.pieces_points = (39, 39)
-		pc_value = {'Q':9, 'R':5, 'N':3, 'B':3, 'P':1}
-		if 
-		self.queening = None		
-	}
-	# Amount of Each Piece Left; Total Piece (Material) Points; Queening
-	
+			self.valid = False
+		self.check = check_if_check(self.board, self.turn)
+		self.stalemate = not self.valid_move_exists and not self.check
+		self.checkmate = not self.valid_moves_exists and self.check
 
-	
-	pc_lost_kind = move['capture'][-1]
+		# Piece Counts and Points
+		self.pieces_left = gs.pieces_left
+		self.pieces_points = gs.pieces_points
+			pc_value = {'Q':9, 'R':5, 'N':3, 'B':3, 'P':1}
+			if self.capture:
+				if self.en_passant:
+					self.pieces_left[swap(turn)]['P']
+					self.pieces_points[] -= 1
+				else:
+					# e.g. if wQ captured, pieces_left['w']['Q'] reduced by 1
+					self.pieces_left[self.on_dest_sq[0]][self.on_dest_sq[-1]] -= 1
+					self.pieces_points[] -= pc_value[self.on_dest_sq]
+		
+		self.pieces_left = {'w': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8},
+						   {'b': {'Q':1, 'R':2, 'N':2, 'B':2, 'P':8}}}
+		self.pieces_points = {'w': 39, 'b': 39}
 
-	if move['capture'].startswith('b'):
-		move['b_pieces_left'][pc_lost_kind] -= 1
-		move['b_piece_pts'] -= pc_value[pc_lost_kind]
-	elif move['capture'].startswith('w'):
-		move['w_pieces_left'][pc_lost_kind] -= 1
-		move['w_piece_pts'] -= pc_value[pc_lost_kind]
+
+
+	def is_checking(self, board):
+		# Check if this move checks the opponent king by ANY piece
+		# (Pieces ordered by general likelihood of giving check)
+		colour = self.turn
+		opp_colour = swap(self.turn)
+		opp_king = opp_colour + 'K'
+		for piece in ['Q', 'R', 'B', 'N', 'P']:
+			move_xy = [
+				(np.where(board == colour+piece)[0].item())
+				(np.where(board == colour+piece)[1].item())
+				(np.where(board == (opp_king)[0].item())),
+				(np.where(board == (opp_king)[1].item()))
+				]
+			hypothetical_move = Move(board, move_xy)
+			# Deemed a valid move if could capture the opponent's king
+			if hypothetical_move.is_valid:
+				return True
+		return False
+
+	def is_walking_into_check(self, board):
+		# Would an opponent's piece be checking you if this move were made
+		hypothetical_move = Move(gs, self)
+		return hypothetical_move.is_checking
+
+			
+
+
+
+
+# ---UPDATE BOARD--------------------------------------------------------------
+def update_board(board, move):
+	new_board = board.copy()
+
+	# Queening scenario: change pawn to queen...
+	if move.piece_kind == 'P' and (move.to_y == 0 or move.to_y == 7):
+		new_board[move.to_y, move.to_x] = str(move.piece_colour)+'Q'
+	elif move.piece == 'bP' and move.to_y == 7:
+		new_board[move.to_y, move.to_x] = 'bQ'
+	# ...otherwise, simply move that same piece to the new square
+	else:
+		new_board[move.to_y, move.to_x] = new_board[move.from_y, move.from_x]
+	new_board[move.from_y, move.from_x] = '  '
 	
-	move['queening'] = (
-			(move['to_y']==0 or move['to_y']==7) and\
-			(move['piece_kind']=='P'))
-	if move['queening'] and move['colour']=='b':
-		move['b_pieces_left'][pc_lost_kind] += 1
-		move['b_piece_pts'] += 9
-	elif move['queening'] and move['colour']=='w':
-		move['w_pieces_left']['Q'] += 1
-		move['w_piece_pts'] += 9
+	# Castling scenarios: additional move required (jump rook over)
+	if move.piece == 'K' and (move.to_x - move.from_x) == 2:
+		board[move.to_y, move.to_x + 1] = '  '
+		board[move.to_y, move.to_x - 1] = str(move.piece_colour)+'R'
+	elif move.piece == 'K' and (move.to_x - move.from_x)==-2:
+		board[move.to_y, move.to_x - 2] = '  '
+		board[move.to_y, move.to_x + 1] = str(move.piece_colour)+'R'
+
+	# En passant scenario: manually remove opponent's pawn
+	if move.en_passant:
+		if move.piece_colour == 'w':
+			new_board[move.to_y + 1, move.to_x] = '  '
+		else:
+			new_board[move.to_y - 1, move.to_x] = '  '
+
+	return new_board
 
 
 
@@ -254,45 +387,41 @@ def to_column_row(file_rank):
 	column_row = [ord(file_rank[0]) - 97, int(file_rank[1]) - 1]
 	return column_row
 
-def to_move_coord(click_coord):
-	return ((click_coord[0]-100)//SQ_SIZE, (click_coord[1]-200)//SQ_SIZE)
-	
+def to_move_xy(click_xy):
+	return ((click_xy[0]-100) // SQ_SIZE, (click_xy[1]-200) // SQ_SIZE)
+
 def swap(turn):
-	if colour == 'w':
-		return 'b'
-	else:
-		return 'w'
+	return 'b' if colour == 'w' else 'w'
 
 def to_algebraic(move):
-	# <dict>    -->    <str> in alegraic notation, like exd4+ f8=Q#
-	# If not Castles; append one character to notation string one at a time
-	if move['is_castle_ks']:
+	# Move() object    -->    <str> in alegraic notation, like exd4+ f8=Q#
+	# If not Castles; append characters to string one at a time
+	if move.castle_ks:
 		return 'O-O'
-	elif move['is_castle_qs']:
+	elif move.castle_qs:
 		return 'O-O-O'
 	
-	move_return = ''
-	if move['piece_kind']=='P' and move['capture']!='  ':
-		# If Pawn Capture, use letter of sq it came from; otherwise, drop the P
-		origin_sq = str(to_file_rank([move['from_x'], move['from_y']]))[0]
+	if move.piece_kind != 'P':
+		move_return += move.piece_kind
+	else:
+		# If pawn move, use only letter from square it came from
+		origin_sq = str(to_file_rank([move.from_x, move.from_y]))[0]
 		move_return += origin_sq
-	elif move['piece_kind']!='P':
-		move_return += move['piece_kind']
-	
-	if move['capture'] != '  ':
+		
+	if move.capture:
 		move_return += 'x'
 
-	destination_sq = str(to_file_rank([move['to_x'], move['to_y']]))
+	destination_sq = str(to_file_rank([move.to_x, move.to_y]))[0]
 	move_return += destination_sq
 	
-	if move['queening']:
+	if move.queening:
 		move_return += '=Q'
 
-	if move['is_checkmate']:
+	if move.checkmate:
 		move_return += '#'
-	elif move['is_stalemate']:
+	elif move.stalemate:
 		move_return += '$'
-	elif move['is_check']:
+	elif move.check:
 		move_return += '+'
 
 	return move_return
@@ -300,14 +429,13 @@ def to_algebraic(move):
 
 
 
-
-# ---DRAW ON SCREEN---------------------------------------------------------
+# ---DRAW ON APP---------------------------------------------------------------
 def load_images():
 	sheet = pg.image.load('chess_set.png').convert_alpha()
 	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB', 'bP',
 			  'wQ', 'wK', 'wR', 'wN', 'wB', 'wP']
 	for i in range(len(pieces)):
-		PIECE_IMG[pieces[i]] = sheet.subsurface(i*50,0,50,50)
+		PIECE_IMG[pieces[i]] = sheet.subsurface(i*50, 0, 50, 50)
 
 def draw_chessboard(screen):
 	pg.draw.rect(screen, BROWN, (80,180,440,440))
@@ -348,6 +476,7 @@ def highlight_sq(screen, colour, point):
 
 
 
+
 # ---PRINT TO SHELL------------------------------------------------------------
 def print_new_game():
 	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
@@ -383,321 +512,17 @@ def print_last_move(last_move):
 			print(key, ' = ', last_move[key])
 	print('\n\n')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	
-def is_move_valid(board, moves, new_move):
-	from_x = move[0]
-	from_y = move[1]
-	to_x = move[2]
-	to_y = move[3]
-	x_diff = to_x - from_x
-	y_diff = to_y - from_y
-	x_direction = -1 if x_diff < 0 else 1
-	y_direction = -1 if y_diff < 0 else 1
-
-	piece = board[from_y, from_x]
-	piece_colour = board[from_y, from_x][0]
-	piece_kind = board[from_y, from_x][-1]
-
-	# --- CHECK #4: check if this is proper move for the piece to make.
-	proper_move = False
-	if piece=='wP' and (
-			(
-				# One square forward
-				from_x == to_x and
-				from_y - to_y == 1 and
-				board[to_y, to_x] == '  ') or 
-			(
-				# Two squares forward
-				from_x == to_x and
-				from_y - to_y == 2 and
-				from_y == 6 and
-				board[to_y, to_x] == '  ' and
-				board[to_y + 1, to_x] == '  ') or
-			(
-				# Capture
-				abs(x_diff) == 1 and
-				from_y - to_y == 1 and
-				board[to_y, to_x].startswith('b'))
-			):
-		proper_move = True
-	elif piece=='wP' and moves and (	
-				# Capture en passant
-				# (Only possible after at least one move has been made)
-				from_y == 3 and
-				to_y == 2 and
-				abs(x_diff) == 1 and
-				moves[-1]['piece'] == 'bP' and
-				moves[-1]['from_y'] == 1 and
-				moves[-1]['to_y'] == 3 and
-				abs(moves[-1]['to_x'] - from_x) == 1):
-		proper_move = True
-	elif piece=='bP' and (
-			(
-				# One square forward
-				from_x == to_x and
-				to_y - from_y == 1 and
-				board[to_y, to_x] == '  ') or 
-			(
-				# Two squares forward
-				from_x == to_x and
-				to_y - from_y == 2 and
-				from_y == 1 and
-				board[to_y, to_x] == '  ' and
-				board[to_y - 1, to_x] == '  ') or
-			(
-				# Capture
-				abs(x_diff) == 1 and
-				to_y - from_y == 1 and
-				board[to_y, to_x].startswith('w'))
-			):
-		proper_move = True
-	elif piece=='bP' and moves and (
-				# Capture en passant
-				# (Only possible after at least one move has been made)
-				from_y == 4 and
-				to_y == 5 and
-				abs(x_diff) == 1 and
-				moves[-1]['piece'] == 'wP' and
-				moves[-1]['from_y'] == 6 and
-				moves[-1]['to_y'] == 4 and
-				abs(moves[-1]['to_x'] - from_x) == 1):
-		proper_move = True
-	if piece_kind=='N':
-			if (	(abs(x_diff)==2 and abs(y_diff)==1) or
-					(abs(x_diff)==1 and abs(y_diff)==2)):
-				proper_move = True
-			else:
-				proper_move = False
-	elif piece_kind=='B':
-		proper_move = (abs(x_diff) == abs(y_diff))
-		# Check for any pieces along the way. If x_diff or y_diff is neg, step
-		# direction = -1 & start at -1 (i.e. don't check origin square at i=0)
-		for i in range(x_direction, x_diff, x_direction):
-			for j in range(y_direction, y_diff, y_direction):
-				if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
-					proper_move = False
-	elif piece_kind=='R':
-		proper_move = True
-		if y_diff == 0:
-			for i in range(x_direction, x_diff, x_direction):
-				if board[from_y, from_x+i] != '  ':
-					proper_move = False
-		elif x_diff == 0:
-			for i in range(y_direction, y_diff, y_direction):
-				if board[from_y+i, from_x] != '  ':
-					proper_move = False
-		else:
-			proper_move = False
-	elif piece_kind=='Q' and moves:
-		# Check for any pieces along the way for 3 cases:
-		# horizontal move (y_diff is 0), vertical move (x_diff is 0),
-		# and diagonal move (absolute values of x_diff & y_diff are equal) 
-		proper_move = True
-		if y_diff == 0:
-			for i in range(x_direction, x_diff, x_direction):
-				if board[from_y, from_x+i] != '  ':
-					proper_move = False
-		elif x_diff == 0:
-			for i in range(y_direction, y_diff, y_direction):
-				if board[from_y+i, from_x] != '  ':
-					proper_move = False
-		elif abs(x_diff) == abs(y_diff):
-			for i in range(x_direction, x_diff, x_direction):
-				for j in range(y_direction, y_diff, y_direction):
-					if abs(i)==abs(j) and board[from_y+j, from_x+i] != '  ':
-						proper_move = False
-		else:
-			proper_move = False
-	elif piece_kind=='K' and moves:
-		# All of the following conditions must be met:
-		# 1) movement of 1 square in any direction, or 2 to side when castling
-		# 2) not walking into opponent king
-		proper_move = (
-			(abs(y_diff)<=1 and abs(x_diff)<=1) or\
-			((not moves[-1]['lost_castle_ks']) and x_diff==2) or\
-			((not moves[-1]['lost_castle_qs']) and x_diff==-2))
-		if proper_move == False:
-
-	if proper_move == False:
-		return False
-	
-
-	# --- CHECK #5: check if this move would move the king into check
-	hypothetical_board = move_piece(board, move)
-	would_be_check = is_check(hypothetical_board, swap(colour), moves)
-	if would_be_check:
-		return False
-
-	return True	
-
-
-def any_valid_moves_left(board, colour, moves):
-	for i in range(8):
-		for j in range(8):
-			if board[i, j][0] == colour:
-				for x in range(8):
-					for y in range(8):
-						valid_move = is_valid_move(
-							board, colour, [j, i, y, x], moves)
-						if valid_move:
-							return True
-	return False
-
-
-
-
-def move_piece(board, move_coord):
-	from_x = move_coord[0]
-	from_y = move_coord[1]
-	to_x = move_coord[2]
-	to_y = move_coord[3]
-	piece = board[from_y, from_x]
-	piece_kind = board[from_y, from_x][-1]
-	piece_colour = board[from_y, from_x][0]
-	capture = board[to_y, to_x]
-
-	new_board = board.copy()
-	
-	# En passant scenario: manually remove opponent's pawn
-	if piece_kind=='P' and abs(from_x-to_x)==1 and capture=='  ':
-		if piece_colour == 'w':
-			new_board[to_y+1, to_x] = '  '
-		else:
-			new_board[to_y-1, to_x] = '  '
-
-	# Pawn queening scenario: change pawn to a queen;
-	# otherwise simply move that same piece to the new square
-	if piece=='wP' and to_y==0:
-		new_board[to_y, to_x] = 'wQ'
-	elif piece=='bP' and to_y==7:
-		new_board[to_y, to_x] = 'bQ'
-	else:
-		new_board[to_y, to_x] = new_board[from_y, from_x]
-	new_board[from_y, from_x] = '  '
-	
-	# Castling scenarios: additional move required (jump rook over)
-	if piece_kind=='K' and (to_x-from_x)==2:
-		new_board[to_y, to_x+1] = '  '
-		new_board[to_y, to_x-1] = str(piece_colour)+'R'
-	elif piece_kind=='K' and (to_x-from_x)==-2:
-		new_board[to_y, to_x-2] = '  '
-		new_board[to_y, to_x+1] = str(piece_colour)+'R'
-
-	return new_board
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ---FUNCTIONS: CLICK EVENT----------------------------------------------------
-def is_click_valid(click_coord):
-	if not ((click_coord[0] < 100 or click_coord[0] >= 500) or\
-	   		(click_coord[1] < 200 or click_coord[1] >= 600)):
-		return True
-	else:
-		return False
-
-
-def is_move_ok(board, colour, move_coord):
-	# Basic validations done first:  1. 'to' and 'from' not same square
-	#								 2. trying to move wrong piece
-	# 								 3. trying to move onto own piece
-	from_x, from_y, to_x, to_y = move_coord
-	if (
-			(from_x, to_x) == (to_x, to_y)) or\
-			(colour != board[from_y][from_x]) or\
-			(colour == board[to_y, to_x][0])
-			):
-		return False
-
-
-# ---GAME OVER-----------------------------------------------------------------
-def is_game_over(moves):
-	# Checkmate, stalemate, or both sides have insufficient material
-	if moves[-1]['is_checkmate']:
-		return 'Checkmate!'
-	elif moves[-1]['is_stalemate']:
-		return 'Stalemate!'
-	elif moves[-1]['insuff_mat'] and moves[-2]['insuff_mat']:
-		return 'Both sides have insufficient material!'
-	return ''
-
 def game_over(message):
 	print(message, ' Game Over.')
 
+
+
+
+# ---MAIN GAME LOOP------------------------------------------------------------
 def terminate():
 	pg.quit()
 	sys.exit()
 
-# ---MAIN GAME LOOP------------------------------------------------------------
 def main():
 	gs = GameState()
 	load_images()
@@ -708,45 +533,28 @@ def main():
 		draw_pieces(win, gs.board)
 		# From third move (ply = 5) onwards, check if game is over
 		if gs.moves > 5:
-			game_over_notice = is_game_over(gs.moves)
+			game_over_notice = gs.is_game_over()
 			if not game_over_notice.empty():
 				game_over(game_over_notice)
 
-		# For every registered click:
-		# Check if click valid --> Check if move valid --> Make move
+		# ---MOUSE IS CLICKED---
 		if clicked:
-			click valid = is_click_valid(gs.click_coord)
+			click valid = gs.is_click_valid()
 			if click_valid:
-				gs.move_coord = to_move_coord(gs.click_coord)
-				if len(gs.move_coord) < 4:
-					# If a piece is selected and it's that colour to move)
-					if ((len(gs.move_coord) == 2) and\
-					    (gs.board[gs.move_coord[1]][gs.move_coord[0]]\
+				gs.move_xy = to_move_xy(gs.click_xy)
+				if len(gs.move_xy) < 4:
+					# A piece is selected and it's that colour to move)
+					if ((len(gs.move_xy) == 2) and\
+					    (gs.board[gs.move_xy[1]][gs.move_xy[0]]\
 								.startswith(gs.turn))):
-						highlight_sq(win, gs.turn, gs.move_coord)
-				elif len(gs.move_coord) == 4:
-					move_ok = is_move_ok(gs.board, gs.turn, gs.move_coord)
-					gs.new_move = get_move_info(gs.board,
-												gs.turn,
-												gs.moves,
-												gs.move_coord)
-					move_valid = is_move_valid(gs.board, gs.moves, gs.new_move)
-				if move_valid:
-					gs.board = move_piece(gs.board, gs.move_coord)
-					gs.moves.append(gs.new_move)
-					gs.move_coord = []
-					gs.turn = swap(gs.turn)
-				else:
-					# Promote old 'to' square to become new 'from' square
-					gs.move_coord[0] = gs.move_coord[2]
-					gs.move_coord[1] = gs.move_coord[3]
-					del gs.move_coord[2:]
-		else:
-			# Reset click variables once nothing left to do with them
-			gs.click_coord = []
-			clicked = ()
-
-
+						highlight_sq(win, gs.turn, gs.move_xy)
+				elif len(gs.move_xy) == 4:
+					gs.new_move = Move(gs, move_xy)
+					if new_move.valid:
+						gs.make_move(new_move)
+					else:
+						gs.change_sq_sel(move_xy)
+						clicked = ()  # Reset click information
 		# ---EVENTS---
 		event = pg.event.get()
 		for e in event:
