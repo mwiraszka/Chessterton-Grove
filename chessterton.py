@@ -51,6 +51,7 @@
 # 24.08.20 music; sfx; font preferences; graphics, cont'd (glitchy)
 # 25.08.20 music & sfx + bottom game options section finalized
 # 27.08.20 identifying check, forbidding walking into check, and counting valid moves - all functional
+# 27.08.20 identifying checkmate and displaying moves
 
 
 # ---IMPORTS-------------------------------------------------------------------
@@ -222,12 +223,14 @@ class GameState:
 
 
 	def is_game_over(self):
-		if self.checkmate:
-			return 'Checkmate!'
+		if self.checkmate and self.turn == 'b':
+			return 'Checkmate! White Wins.'
+		elif self.checkmate and self.turn == 'w':
+			return 'Checkmate! Black Wins.'
 		elif self.stalemate:
-			return 'Stalemate!'
+			return 'Stalemate! Draw.'
 		elif self.insuff_mat:
-			return 'Both sides have insufficient material!'
+			return 'Insuff. material! Draw.'
 		return ''
 
 	def count_pieces(self):
@@ -420,7 +423,6 @@ class Move:
 					return True
 		return False
 
-
 	def check_how_many_opp_moves_left(self, gs):
 		post_move_gs = GameState(99)
 		post_move_gs.board = gs.board.copy()
@@ -503,11 +505,9 @@ def to_algebraic(move):
 		destination = str(to_file_rank([move.to_x, move.to_y]))
 
 	queening = '=Q' if move.is_queening else ''
-	checkmate = '#' if (not move.opp_moves_left and move.is_check) else ''
-	stalemate = '$' if (not move.opp_moves_left and not move.is_check) else ''
-	if not checkmate:
-		check = '+' if move.is_check else ''
-	
+	checkmate = '#' if move.opp_moves_left == 0 and move.is_check else ''
+	stalemate = '$' if move.opp_moves_left == 0 and not move.is_check else ''
+	check = '+' if move.is_check and not checkmate else ''
 	full_move = (
 					piece_kind
 			  	  + capture
@@ -601,17 +601,6 @@ def draw_bottom_options(screen, track, music_on, v_up, v_down, flip, ng, gs):
 	screen.blit(text_7, (646,642))
 	screen.blit(text_8, (673,664))
 
-def draw_pieces(screen, board, flip=False, new_game=False):
-	for i in range(8):
-		for j in range(8):
-			if board[i][j] != '  ':
-				pc = board[i][j]
-				if not flip:
-					screen.blit(PIECE_IMG[pc],(100+j*SQ_SIZE, 200+i*SQ_SIZE))
-				else:
-					screen.blit(PIECE_IMG[pc],(450-j*SQ_SIZE, 550-i*SQ_SIZE))
-	if new_game:
-		pieces_fall.play()
 
 def draw_rounded_rect(surface, rect, col, cor_r):
     # ---Function courtesy of Glenn Mackintosh on StackOverflow---
@@ -663,6 +652,18 @@ def draw_bordered_rounded_rect(surface, rect, col, bord_col, corn_rad, bord_th):
 	else:
 		draw_rounded_rect(surface, rect_tmp, col, inner_rad)
 
+def draw_pieces(screen, board, flip=False, new_game=False):
+	for i in range(8):
+		for j in range(8):
+			if board[i][j] != '  ':
+				pc = board[i][j]
+				if not flip:
+					screen.blit(PIECE_IMG[pc],(100+j*SQ_SIZE, 200+i*SQ_SIZE))
+				else:
+					screen.blit(PIECE_IMG[pc],(450-j*SQ_SIZE, 550-i*SQ_SIZE))
+	if new_game:
+		pieces_fall.play()
+
 def highlight_sq(screen, colour, sq_from, gs, flip):
 	# Draw blue square with white or black rounded border, 4 px thick
 	col = WHT if colour == 'w' else BLK
@@ -676,12 +677,35 @@ def draw_sidebar(screen, gs, move_list):
 	header_text = create_text(("Game " + str(gs.game_num)), font_pref, 24, BLK)
 	screen.blit(header_text, (636,190))
 	pg.draw.rect(screen, ML_GRY, (590,209,155,2))
+
 	if move_list:
-		move_text = create_text((move_list[-1]), font_pref, 22, BLK)
-		screen.blit(move_text, (570,240))
+		if len(move_list) > 30:
+			# Truncate to show only last 15 moves maximum (30 plies)
+			move_list[-30:]
+		for i in range(len(move_list)):
+			if i % 2 == 0:
+				text_with_num = (str(int(i/2+1)) + '.  ' + move_list[i])
+				move_text = create_text(text_with_num, font_pref, 22, BLK)
+				if (i/2+1) < 10:	
+					screen.blit(move_text, (600,220+i*10))
+				else:
+					screen.blit(move_text, (592,220+i*10))
+			else:
+				move_text = create_text(move_list[i], font_pref, 22, BLK)
+				screen.blit(move_text, (695,220+(i-1)*10))
+
+def draw_game_over_message(screen, info):
+	if info == 'Stalemate! Draw.':
+		offset = 20
+	elif info == 'Insuff. material! Draw.':
+		offset = -20
+	else:
+		offset = 0
+	draw_bordered_rounded_rect(screen, (567,550,200,50), M_GRY, D_GRY, 4, 2)
+	game_over_message = create_text(info, font_pref, 20, BLK)
+	screen.blit(game_over_message, (593+offset,568))
 
 def update_move_list(moves):
-	# First, convert moves list to algebraic chess notation, one move at a time
 	move_list = []
 	for move in range(len(moves)):
 		new_move = to_algebraic(moves[move])
@@ -736,9 +760,6 @@ def print_current_gamestate(gs, click_xy='N/A', sq_from='N/A', sq_to='N/A'):
 		else:
 			print(names[name], ' '*offset, values[name])	
 	print('\n\n')
-
-def print_game_over(message):
-	print(message, ' Game Over.')
 
 
 # ---MUSIC AND SOUND CHANGES---------------------------------------------------
@@ -822,10 +843,11 @@ def main():
 		draw_sidebar(win, gs, move_list)
 		
 		# ---From third move (5th ply) onwards, check if game is over
-		if len(gs.moves) > 5:
-			game_over_notice = gs.is_game_over()
-			if game_over_notice != '':
-				print_game_over(game_over_notice)
+		if len(gs.moves) >= 5:
+			game_over_info = gs.is_game_over()
+			if game_over_info != '':
+				draw_game_over_message(win, game_over_info)
+
 
 		# ---MOUSE IS CLICKED
 		if click_xy:
@@ -848,19 +870,12 @@ def main():
 							gs.update_board(new_move)
 							new_move.is_check = new_move.check_if_check(gs)
 							new_move.opp_moves_left = new_move.check_how_many_opp_moves_left(gs)
-
 							gs.make_move(new_move)
 							move_list = update_move_list(gs.moves)
-							print('summary:')
-							print('how many moves does opponent have left?', new_move.opp_moves_left)
-							print('check?', gs.check)
-							print('checkmate?', gs.checkmate)
-							print('stalemate?', gs.stalemate, '\n\n')
-							
-						if sound_on:
-							m_1.play() if new_move.turn == 'w' else m_2.play()
-							if new_move.is_capture:
-								capture.play()
+							if sound_on:
+								m_1.play() if new_move.turn == 'w' else m_2.play()
+								if new_move.is_capture:
+									capture.play()
 					sq_from = sq_to = []
 			elif clicked == 'music_on' or clicked == 'music_off':
 				music_on = jukebox('p', music_on)
