@@ -50,6 +50,7 @@
 # 23.08.20 flip board option, various graphical enhancements
 # 24.08.20 music; sfx; font preferences; graphics, cont'd (glitchy)
 # 25.08.20 music & sfx + bottom game options section finalized
+# 27.08.20 identifying check, forbidding walking into check, and counting valid moves - all functional
 
 
 # ---IMPORTS-------------------------------------------------------------------
@@ -72,7 +73,7 @@ FPS = 60
 
 BLK = (10,10,10)
 WHT = (245,245,245)
-B_SQ = (80,70,60)
+B_SQ = (90,80,70)
 W_SQ = (200,200,200)
 L_BLUE = (113,124,181)
 D_BLUE = (83,94,151)
@@ -146,7 +147,8 @@ clock = pg.time.Clock()
 
 # ---CLASSES-------------------------------------------------------------------
 class GameState:
-	def __init__(self):
+	def __init__(self, game_num):
+		self.game_num = game_num
 		self.board = np.array([
 			['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
 			['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
@@ -166,16 +168,16 @@ class GameState:
 		self.castling_rights_qs = {'w': True, 'b': True}
 		self.castling_rights_ks = {'w': True, 'b': True}
 		self.moves = []
-		self.check = False
-		self.stalemate = False
-		self.checkmate = False
+		self.check = None
+		self.stalemate = None
+		self.checkmate = None
 
 
 	def update_board(self, move):
 		new_board = self.board.copy()
 		
 		# Update destination and origin squares
-		if move.queening:
+		if move.is_queening:
 			new_board[move.to_y, move.to_x] = str(move.piece_colour)+'Q'
 		else:
 			new_board[move.to_y, move.to_x] = move.piece
@@ -190,7 +192,7 @@ class GameState:
 			new_board[move.to_y, move.to_x-1] = str(move.piece_colour)+'R'
 		
 		# En passant scenario: additionally manually remove opponent's pawn
-		if move.en_passant:
+		if move.is_en_passant:
 			if move.piece_colour == 'w':
 				new_board[move.to_y + 1, move.to_x] = '  '
 			else:
@@ -199,63 +201,25 @@ class GameState:
 		self.board = new_board
 
 
-	def valid_moves(self, find_all=False):
-		print('VALID MOVES LEFT for', self.turn, '?')
-		print(self.board)
-		valid_moves_left = []
+	def get_valid_moves(self):
+		valid_moves = []
 		for from_row, from_col in np.ndindex(self.board.shape):
-			on_sq = (self.board[from_row, from_col])
+			on_sq = self.board[from_row, from_col]
 			if on_sq.startswith(self.turn):
 				for to_row in range(8):
 					for to_col in range(8):
-						from_sq = [from_row, from_col]
-						to_sq = [to_row, to_col]
-						if from_sq != to_sq:
-							hyp_move = Move(self, from_sq, to_sq)
-							move_valid = hyp_move.is_valid(self, True)
-							if move_valid and not find_all:
-								return True
-							elif move_valid and find_all:
-								to_app = str(on_sq) + ' ' + str(from_sq) + ' ' + str(to_sq)
-								valid_moves_left.append(to_app)
-		if find_all:
-			return valid_moves_left
-		else:
-			return False
+						sq_from = [from_col, from_row]
+						sq_to = [to_col, to_row]
+						dest_sq = self.board[to_row, to_col]
+						if sq_from != sq_to and not dest_sq.startswith(self.turn):
+							hypothetical_move = Move(self, sq_from, sq_to)
+							if hypothetical_move.is_legal:
+								walking_into_check = hypothetical_move.check_if_walk_into_check(self)
+								if not walking_into_check:
+									to_append = str(on_sq) + ' ' + str(sq_from) + ' ' + str(sq_to)
+									valid_moves.append(to_append)
+		return valid_moves
 
-	def is_check(self):
-		# 'turn' is the side supposedly giving check, therefore opponent's king is swap(turn)
-		king_loc = np.where(self.board == swap(self.turn)+'K')
-		king = [king_loc[1].item(), king_loc[0].item()]
-		counter = 0
-		# pieces verified in order of general likelihood of giving check
-		for piece_type in ['Q', 'R', 'B', 'N', 'P']:
-			piece_loc = np.where(self.board == self.turn+piece_type)
-			for i in range(len(piece_loc[0])):
-				piece = [piece_loc[1][i], piece_loc[0][i]]
-				counter += 1
-				hyp_move = Move(self, piece, king)
-				# (..., only_piece_validity = True, cant_capture_king = False)
-				valid = hyp_move.is_valid(self, True, False)
-				if valid:
-					return True
-		return False
-
-	def is_stalemate(self):
-		print('checking if stalemate...')
-		valid_move_list = self.valid_moves(True)
-		if valid_move_list:
-			print(valid_move_list)
-			moves_left = True
-		return not moves_left and not self.check
-
-	def is_checkmate(self):
-		print('checking if checkmate...')
-		valid_move_list = self.valid_moves(True)
-		if valid_move_list:
-			print(valid_move_list)
-			moves_left = True
-		return not moves_left and self.check
 
 	def is_game_over(self):
 		if self.checkmate:
@@ -290,11 +254,6 @@ class GameState:
 
 	def make_move(self, new_move):
 		self.update_board(new_move)
-		self.check = self.is_check()
-		self.stalemate = self.is_stalemate()
-		self.checkmate = self.is_checkmate()
-		print('Check, Stalemate, Checkmate:', self.check, self.stalemate, self.checkmate)
-
 		if (
 				(new_move.is_castle_qs) or
 				(new_move.piece_kind == 'R' and new_move.from_x == 0)
@@ -308,8 +267,11 @@ class GameState:
 		if new_move.piece_kind == 'K':
 			self.castling_rights_qs[self.turn] = False
 			self.castling_rights_ks[self.turn] = False
-
+		self.check = new_move.is_check
+		self.checkmate = new_move.opp_moves_left == 0 and new_move.is_check
+		self.stalemate = new_move.opp_moves_left == 0 and not new_move.is_check
 		self.moves.append(new_move)
+
 		self.ply_num += 1
 		self.turn = swap(self.turn)
 
@@ -334,25 +296,28 @@ class Move:
 		self.piece_kind = self.piece[1]
 		self.dest_sq = gs.board[self.to_y, self.to_x]
 		
-		self.queening = ((self.to_y == 0 and self.piece == 'wP') or
+		self.is_queening = ((self.to_y == 0 and self.piece == 'wP') or
 					     (self.to_y == 7 and self.piece == 'bP'))
-		self.en_passant = self.is_en_passant(gs.moves[-1]) if gs.moves else False
-		self.check = False
-		self.stalemate = False
-		self.checkmate = False
 		self.is_castle_ks = (self.piece_kind == 'K' and self.x_diff == 2)
 		self.is_castle_qs = (self.piece_kind == 'K' and self.x_diff == -2)
+		if gs.moves:
+			# Last move was a two-sq pawn move to the sq adjacent to where this move
+			# originates from, and this pawn makes a capture behind the en-pass pawn.
+			self.is_en_passant = ((self.piece_kind == 'P') and
+	 			    			  (gs.moves[-1].piece_kind == 'P') and
+	 			    			  (abs(gs.moves[-1].y_diff) == 2) and
+	 			    			  (gs.moves[-1].to_y == self.from_y) and
+	 			    			  (abs(gs.moves[-1].from_x - self.from_x) == 1) and
+	 			    			  (gs.moves[-1].to_x == self.to_x))
+		else:
+			self.is_en_passant = False
+		self.is_capture = self.is_en_passant or self.dest_sq != '  '
+		self.is_legal = self.check_if_legal(gs)
+		self.is_walk_into_check = None
+		self.is_check = None
+		self.opp_moves_left = None
 
-	def is_valid(self, gs, only_piece_validity=False, cant_capture_king=True):
-		if not only_piece_validity:
-			walk_into = self.is_walk_into_check(gs)
-			if walk_into:
-				return False
-		
-		if cant_capture_king:
-			if self.dest_sq.endswith('K'):
-				return False
-
+	def check_if_legal(self, gs):
 		if self.piece_kind == 'P':
 			valid_dir = ((self.piece_colour == 'w' and self.y_dir == -1) or
 					     (self.piece_colour == 'b' and self.y_dir == 1))
@@ -365,7 +330,7 @@ class Move:
 					      (gs.board[self.to_y, self.to_x] == '  ') and
 					      (gs.board[mid_point, self.to_x] == '  ') and
 					      (self.from_y == 1 or self.from_y == 6))
-			return (valid_dir and (self.en_passant or
+			return (valid_dir and (self.is_en_passant or
 								   valid_capture or
 								   valid_1_sq or
 								   valid_2_sq))
@@ -434,28 +399,35 @@ class Move:
 		   					   (gs.board[self.from_y, self.from_x + 2] == '  '))
 			return valid_1_sq or valid_castle_qs or valid_castle_ks
 
-	def is_en_passant(self, last_move):
-		if last_move:
-			# Last move was a two-sq pawn move to the sq adjacent to where this move
-			# originates from, and this pawn makes a capture behind the en-pass pawn.
-			return ((self.piece_kind == 'P') and
-	 			    (last_move.piece_kind == 'P') and
-	 			    (abs(last_move.y_diff) == 2) and
-	 			    (last_move.to_y == self.from_y) and
-	 			    (abs(last_move.from_x - self.from_x) == 1) and
-	 			    (last_move.to_x == self.to_x))
+	def check_if_walk_into_check(self, gs):
+		post_move_gs = GameState(0)
+		post_move_gs.board = gs.board.copy()
+		post_move_gs.update_board(self)
+		post_move_gs.turn = swap(gs.turn)
+		return self.check_if_check(post_move_gs)
+
+	def check_if_check(self, gs):
+		opp_king_loc = np.where(gs.board == swap(gs.turn)+'K')
+		opp_king = [opp_king_loc[1].item(), opp_king_loc[0].item()]
+		
+		# pieces verified in order of general likelihood of giving check
+		for piece_type in ['Q', 'R', 'B', 'N', 'P']:
+			piece_loc = np.where(gs.board == gs.turn+piece_type)
+			for i in range(len(piece_loc[0])):
+				piece = [piece_loc[1][i], piece_loc[0][i]]
+				hypothetical_king_capture = Move(gs, piece, opp_king)
+				if hypothetical_king_capture.is_legal:
+					return True
+		return False
 
 
-	def is_capture(self):
-		return (self.en_passant or self.dest_sq != '  ')
-
-	def is_walk_into_check(self, gs):
-		# Were this move made, would an opponent's piece be checking you
-		hyp_gs = copy.copy(gs)
-		hyp_gs.update_board(self)
-		opp_turn = swap(self.turn)
-		is_check = hyp_gs.is_check()
-		return is_check
+	def check_how_many_opp_moves_left(self, gs):
+		post_move_gs = GameState(99)
+		post_move_gs.board = gs.board.copy()
+		post_move_gs.update_board(self)
+		post_move_gs.turn = swap(gs.turn)
+		valid_moves = post_move_gs.get_valid_moves()
+		return (len(valid_moves))
 
 
 # ---CONVERSIONS---------------------------------------------------------------
@@ -468,6 +440,34 @@ def to_column_row(file_rank):
 	# <str>  {a,b,..,h}{1,2,..,8}   -->   <int list> {0,1,..,7}{0,1,..,7}
 	column_row = [ord(file_rank[0]) - 97, int(file_rank[1]) - 1]
 	return column_row
+
+def to_what_clicked(click_xy):
+	x = click_xy[0]
+	y = click_xy[1]
+	if (x >= 100 and x <= 500) and (y >= 200 and y <= 600):
+		return 'board'
+	elif (x >= 95 and x <= 123) and (y >= 661 and y <= 679):
+		return 'music_on'
+	elif (x >= 128 and x <= 162) and (y >= 661 and y <= 679):
+		return 'music_off'
+	elif (x >= 221 and x <= 239) and (y >= 661 and y <= 679):
+		return 'vol_down'
+	elif (x >= 243 and x <= 261) and (y >= 661 and y <= 679):
+		return 'vol_up'
+	elif (x >= 285 and x <= 303) and (y >= 661 and y <= 679):
+		return '1'
+	elif (x >= 308 and x <= 326) and (y >= 661 and y <= 679):
+		return '2'
+	elif (x >= 331 and x <= 349) and (y >= 661 and y <= 679):
+		return '3'
+	elif (x >= 493 and x <= 627) and (y >= 639 and y <= 658):
+		return 'new_game'
+	elif (x >= 493 and x <= 627) and (y >= 661 and y <= 679):
+		return 'flip_board'
+	elif (x >= 633 and x <= 767) and (y >= 639 and y <= 658):
+		return 'game_state'
+	elif (x >= 633 and x <= 767) and (y >= 661 and y <= 679):
+		return 'quit'
 
 def to_sq_xy(click_xy, flip):
 	x = (click_xy[0]-100) // SQ_SIZE
@@ -482,42 +482,45 @@ def swap(turn):
 
 def to_algebraic(move):
 	# Move() object    -->    <str> in alegraic notation, like exd4+ f8=Q#
-	# If not Castles; append characters to string one at a time
-	move_return = ''
-	if move.is_castle_ks():
+	# If not Castles; gather characters one at a time
+	if move.is_castle_ks:
 		return 'O-O'
-	elif move.is_castle_qs():
+	elif move.is_castle_qs:
 		return 'O-O-O'
-	
+
+	# If pawn move, use only letter from square it came from
 	if move.piece_kind != 'P':
-		move_return += move.piece_kind
+		piece_kind = move.piece_kind
 	else:
-		# If pawn move, use only letter from square it came from
-		origin_sq = str(to_file_rank([move.from_x, move.from_y]))[0]
-		move_return += origin_sq
-		
-	if move.is_capture():
-		move_return += 'x'
-
-	destination_sq = str(to_file_rank([move.to_x, move.to_y]))[0]
-	move_return += destination_sq
+		piece_kind = str(to_file_rank([move.from_x, move.from_y]))[0]
 	
-	if move.queening:
-		move_return += '=Q'
+	capture = 'x' if move.is_capture else ''
+	
+	# If pawn move (non-capture), file already given, so only need to add rank
+	if move.piece_kind == 'P' and not move.is_capture:
+		destination = str(to_file_rank([move.to_x, move.to_y]))[1]
+	else:
+		destination = str(to_file_rank([move.to_x, move.to_y]))
 
-	if move.checkmate:
-		move_return += '#'
-	elif move.stalemate:
-		move_return += '$'
-	elif move.check:
-		move_return += '+'
+	queening = '=Q' if move.is_queening else ''
+	checkmate = '#' if (not move.opp_moves_left and move.is_check) else ''
+	stalemate = '$' if (not move.opp_moves_left and not move.is_check) else ''
+	if not checkmate:
+		check = '+' if move.is_check else ''
+	
+	full_move = (
+					piece_kind
+			  	  + capture
+			  	  + destination
+			  	  + queening
+			  	  + checkmate
+			  	  + stalemate
+			  	  + check)
+	return full_move
 
-	return move_return
 
 
-
-
-# ---CLICKING EVENTS & DRAWING TO SCREEN---------------------------------------
+# ---IMAGES & DRAWING TO SCREEN------------------------------------------------
 def load_images():
 	sheet = pg.image.load('img/chess_set.png').convert_alpha()
 	pieces = ['bQ', 'bK', 'bR', 'bN', 'bB', 'bP',
@@ -544,11 +547,7 @@ def draw_chessboard(screen, flip=False):
 		letters = create_text(('{}'.format(chr(65+i))), font_pref, 16, WHT)
 		screen.blit(digits, (87+flip_offset, digits_order))
 		screen.blit(letters, (letters_order, 605-flip_offset))
-
-def draw_sidebar(screen):
-	draw_bordered_rounded_rect(screen, (540,180,255,440), L_GRY, D_GRY, 5, 3)
 	
-
 def draw_bottom_options(screen, track, music_on, v_up, v_down, flip, ng, gs):
 	draw_bordered_rounded_rect(screen, (80,635,WIN_W-160,50), L_GRY, D_GRY, 5, 3)
 	if track == 1:
@@ -602,7 +601,6 @@ def draw_bottom_options(screen, track, music_on, v_up, v_down, flip, ng, gs):
 	screen.blit(text_7, (646,642))
 	screen.blit(text_8, (673,664))
 
-
 def draw_pieces(screen, board, flip=False, new_game=False):
 	for i in range(8):
 		for j in range(8):
@@ -614,7 +612,6 @@ def draw_pieces(screen, board, flip=False, new_game=False):
 					screen.blit(PIECE_IMG[pc],(450-j*SQ_SIZE, 550-i*SQ_SIZE))
 	if new_game:
 		pieces_fall.play()
-
 
 def draw_rounded_rect(surface, rect, col, cor_r):
     # ---Function courtesy of Glenn Mackintosh on StackOverflow---
@@ -645,7 +642,6 @@ def draw_rounded_rect(surface, rect, col, cor_r):
     rect_tmp.center = rect.center
     pg.draw.rect(surface, col, rect_tmp)
 
-
 def draw_bordered_rounded_rect(surface, rect, col, bord_col, corn_rad, bord_th):
 	if corn_rad < 0:
 		raise ValueError(f"Border radius ({corner_rad}) must be >= 0")
@@ -667,7 +663,6 @@ def draw_bordered_rounded_rect(surface, rect, col, bord_col, corn_rad, bord_th):
 	else:
 		draw_rounded_rect(surface, rect_tmp, col, inner_rad)
 
-
 def highlight_sq(screen, colour, sq_from, gs, flip):
 	# Draw blue square with white or black rounded border, 4 px thick
 	col = WHT if colour == 'w' else BLK
@@ -676,35 +671,22 @@ def highlight_sq(screen, colour, sq_from, gs, flip):
 	draw_bordered_rounded_rect(screen,
 		(98+pt_x*50, 198+pt_y*50, SQ_SIZE+4, SQ_SIZE+4), D_BLUE, col, 4, 2)
 
+def draw_sidebar(screen, gs, move_list):
+	draw_bordered_rounded_rect(screen, (540,180,255,440), L_GRY, D_GRY, 5, 3)
+	header_text = create_text(("Game " + str(gs.game_num)), font_pref, 24, BLK)
+	screen.blit(header_text, (636,190))
+	pg.draw.rect(screen, ML_GRY, (590,209,155,2))
+	if move_list:
+		move_text = create_text((move_list[-1]), font_pref, 22, BLK)
+		screen.blit(move_text, (570,240))
 
-def what_clicked(click_xy):
-	x = click_xy[0]
-	y = click_xy[1]
-	if (x >= 100 and x <= 500) and (y >= 200 and y <= 600):
-		return 'board'
-	elif (x >= 95 and x <= 123) and (y >= 661 and y <= 679):
-		return 'music_on'
-	elif (x >= 128 and x <= 162) and (y >= 661 and y <= 679):
-		return 'music_off'
-	elif (x >= 221 and x <= 239) and (y >= 661 and y <= 679):
-		return 'vol_down'
-	elif (x >= 243 and x <= 261) and (y >= 661 and y <= 679):
-		return 'vol_up'
-	elif (x >= 285 and x <= 303) and (y >= 661 and y <= 679):
-		return '1'
-	elif (x >= 308 and x <= 326) and (y >= 661 and y <= 679):
-		return '2'
-	elif (x >= 331 and x <= 349) and (y >= 661 and y <= 679):
-		return '3'
-	elif (x >= 493 and x <= 627) and (y >= 639 and y <= 658):
-		return 'new_game'
-	elif (x >= 493 and x <= 627) and (y >= 661 and y <= 679):
-		return 'flip_board'
-	elif (x >= 633 and x <= 767) and (y >= 639 and y <= 658):
-		return 'game_state'
-	elif (x >= 633 and x <= 767) and (y >= 661 and y <= 679):
-		return 'quit'
-
+def update_move_list(moves):
+	# First, convert moves list to algebraic chess notation, one move at a time
+	move_list = []
+	for move in range(len(moves)):
+		new_move = to_algebraic(moves[move])
+		move_list.append(new_move)
+	return move_list
 
 
 # ---PRINT TO SHELL------------------------------------------------------------
@@ -754,59 +736,12 @@ def print_current_gamestate(gs, click_xy='N/A', sq_from='N/A', sq_to='N/A'):
 		else:
 			print(names[name], ' '*offset, values[name])	
 	print('\n\n')
-	
-def print_last_move(lm):
-	# Print out each move 'attribute' on separate lines under neat columns
-	print('-'*24, 'Last Move\'s Info', '-'*24)
-	names = ['Ply Number:',
-			 'Move Number:',
-			 'Turn:',
-			 'From X:',
-			 'From Y:',
-			 'To X:',
-			 'To Y:',
-			 '   X Difference:',
-			 '   Y Difference:',
-			 '   X Direction:',  
-			 '   Y Direction:',
-			 'Piece:',
-			 '   Piece Kind:',
-		     '   Piece Colour:', 
-			 'Destination Sq:',
-			 'Queening?']
-	values = [lm.ply_num, lm.move_num, lm.turn, lm.from_x, lm.from_y, lm.to_x,
-			  lm.to_y, lm.x_diff, lm.y_diff, lm.x_dir, lm.y_dir, lm.piece,
-			  lm.piece_kind, lm.piece_colour, lm.dest_sq, lm.queening]
-	for name in range(len(names)):
-		offset = 25 - len(str(names[name]))
-		if values[name] == '  ':
-			values[name] = '(empty)'
-		print(names[name], ' '*offset, values[name])
-	print('\n\n')
-
-def print_move_list(moves):
-	# First, convert moves list to algebraic chess notation, one move at a time
-	move_list = []
-	for i in range(len(moves)):
-		new_move = to_algebraic(moves[i])
-		move_list.append(new_move)
-	# Print out with offset compensation, so moves show up in straight columns
-	print('   ---Move List---')
-	for i in range(len(move_list)):
-		offset = 5 - len(move_list[i])
-		if i % 2 == 0:
-			if int((i+3)/2) < 10:
-				print(end=' ')  # Extra space before one-digit numbers
-			print(str(int((i+3)/2)), '.  ', move_list[i], ' '*offset, end=' ')
-		else:
-			print(move_list[i])
-	print('\n\n')
 
 def print_game_over(message):
 	print(message, ' Game Over.')
 
 
-
+# ---MUSIC AND SOUND CHANGES---------------------------------------------------
 def jukebox(request, current_on=None):
 	if request == '1' or request == '2' or request == '3': 
 		pg.mixer.music.stop()
@@ -841,11 +776,14 @@ def terminate():
 def main():
 	# ---MISC INITS
 	new_game = True
+	move_list = []
 	click_xy = sq_from = sq_to = []  # User-derived inputs
 	toggle_flip = vol_up = vol_down = show_gs = False
 	flip_delay = jukebox_delay = vol_button_hold = 0
-	current_track = jukebox('1')
 	sound_on = music_on = True
+	current_track = None
+	game_counter = 1
+
 	bg = pg.image.load('img/bg.png').convert_alpha()
 	load_images()
 	print_welcome_msg()
@@ -853,7 +791,8 @@ def main():
 	while True:
 		# ---Various delays to keep buttons lit up for some time
 		if new_game:
-			gs = GameState()
+			gs = GameState(game_counter)
+			game_counter += 1
 			ng_button_hold = 3
 		if ng_button_hold > 0:
 			ng_button = True
@@ -875,20 +814,22 @@ def main():
 		if sq_from and not sq_to:
 			highlight_sq(win, gs.turn, sq_from, gs, toggle_flip)
 		draw_pieces(win, gs.board, toggle_flip, new_game)
+		if new_game and not current_track:
+			current_track = jukebox('1')
+		new_game = False
 		draw_bottom_options(win, int(current_track), music_on,
 						    vol_up, vol_down, toggle_flip, ng_button, show_gs)
-		draw_sidebar(win)
-		new_game = False
-
-		# From third move (5th ply) onwards, check if game is over
+		draw_sidebar(win, gs, move_list)
+		
+		# ---From third move (5th ply) onwards, check if game is over
 		if len(gs.moves) > 5:
 			game_over_notice = gs.is_game_over()
 			if game_over_notice != '':
 				print_game_over(game_over_notice)
 
-		# ---MOUSE IS CLICKED--------------------------------------------------
+		# ---MOUSE IS CLICKED
 		if click_xy:
-			clicked = what_clicked(click_xy)
+			clicked = to_what_clicked(click_xy)
 			if clicked == 'board':
 				new_sq_xy = to_sq_xy(click_xy, toggle_flip)
 				on_sq = gs.board[new_sq_xy[1], new_sq_xy[0]]
@@ -898,12 +839,27 @@ def main():
 				elif sq_from and (sq_from != sq_to):
 					sq_to = new_sq_xy
 					new_move = Move(gs, sq_from, sq_to)
-					if new_move.is_valid(gs):
-						gs.make_move(new_move)
+					# First, see if the piece can legally move there
+					if new_move.is_legal:
+						# Next, see if this move puts your king in check
+						new_move.is_walk_into_check = new_move.check_if_walk_into_check(gs)
+						if not new_move.is_walk_into_check:
+							# If both legal and not walking into check, can make move.
+							gs.update_board(new_move)
+							new_move.is_check = new_move.check_if_check(gs)
+							new_move.opp_moves_left = new_move.check_how_many_opp_moves_left(gs)
+
+							gs.make_move(new_move)
+							move_list = update_move_list(gs.moves)
+							print('summary:')
+							print('how many moves does opponent have left?', new_move.opp_moves_left)
+							print('check?', gs.check)
+							print('checkmate?', gs.checkmate)
+							print('stalemate?', gs.stalemate, '\n\n')
+							
 						if sound_on:
-							print('sound on')
 							m_1.play() if new_move.turn == 'w' else m_2.play()
-							if new_move.is_capture():
+							if new_move.is_capture:
 								capture.play()
 					sq_from = sq_to = []
 			elif clicked == 'music_on' or clicked == 'music_off':
@@ -928,7 +884,7 @@ def main():
 				terminate()
 			click_xy = []
 		
-		# ---EVENTS------------------------------------------------------------
+		# ---KEYBOARD & MOUSE EVENTS
 		event = pg.event.get()
 		for e in event:
 			if e.type == MOUSEBUTTONUP and show_gs:
@@ -948,7 +904,7 @@ def main():
 				if e.key == K_g:
 					show_gs = True
 				if jukebox_delay == 0:
-					if e.key == K_p:
+					if e.key == K_p or e.key == K_m:
 						music_on = jukebox('p', music_on)
 					if e.key == K_1 or e.key == K_2 or e.key == K_3:
 						if e.key == K_1:
