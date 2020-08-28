@@ -52,7 +52,7 @@
 # 27.08.20 identifying checkmate and displaying moves
 # 28.08.20 sidebar glitches fixes; includes move number if white; counting pieces and piece pts
 # 28.08.20 display game state to sidebar by holding G
-# 28.08.20 game over message bug fixed; v1.0 final touches //.
+# 28.08.20 gameplay screenshots; v1.0 complete //.
 
 # ---VERSION 1.0---------------------------------------------------------------
 # - human vs. human gameplay
