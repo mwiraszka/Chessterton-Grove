@@ -1,10 +1,8 @@
 # CHESSTERTON GROVE
 # by Michal Wiraszka
 
-# A chess game made entirely on Python, making heavy use of its Pygame and Numpy modules.
+# A chess game written entirely in Python, making heavy use of its Pygame module.
 
-
-# ---VERSION 1.0:
 # 19.06.20 project started
 # 20.06.20 chessboard drawn
 # 21.06.20 (test - github update)
@@ -53,6 +51,19 @@
 # 27.08.20 identifying check, forbidding walking into check, and counting valid moves - all functional
 # 27.08.20 identifying checkmate and displaying moves
 # 28.08.20 sidebar glitches fixes; includes move number if white; counting pieces and piece pts
+# 28.08.20 display game state to sidebar by holding G
+# 28.08.20 game over message bug fixed; v1.0 final touches //.
+
+# ---VERSION 1.0---------------------------------------------------------------
+# - human vs. human gameplay
+# - flip board, show current game state info, and start new game functionality
+# - controllable jukebox with three (...sophisticated) Classical music tracks
+# - independently-designed and integrated move, capture, and board sound effects
+# - game's moves relayed in side window, printed in algebraic chess notation
+
+# ---Next Steps----------------------------------------------------------------
+# - recognizing stalemate, drawing possible moves for selected piece, basic AI
+
 
 
 # ---IMPORTS-------------------------------------------------------------------
@@ -174,10 +185,8 @@ class GameState:
 		self.stalemate = None
 		self.checkmate = None
 
-
 	def update_board(self, move):
 		new_board = self.board.copy()
-		
 		# Update destination and origin squares
 		if move.is_queening:
 			new_board[move.to_y, move.to_x] = str(move.piece_colour)+'Q'
@@ -202,7 +211,6 @@ class GameState:
 		
 		self.board = new_board
 
-
 	def get_valid_moves(self):
 		valid_moves = []
 		for from_row, from_col in np.ndindex(self.board.shape):
@@ -222,7 +230,6 @@ class GameState:
 									valid_moves.append(to_append)
 		return valid_moves
 
-
 	def is_game_over(self):
 		if self.checkmate and self.turn == 'b':
 			return 'Checkmate! White Wins.'
@@ -233,7 +240,6 @@ class GameState:
 		elif self.insuff_mat:
 			return 'Insuff. material! Draw.'
 		return ''
-
 
 	def make_move(self, new_move):
 		# Update counts if piece has been captured
@@ -521,7 +527,6 @@ def to_algebraic(move):
 	return full_move
 
 
-
 # ---IMAGES & DRAWING TO SCREEN------------------------------------------------
 def load_images():
 	sheet = pg.image.load('img/chess_set.png').convert_alpha()
@@ -603,7 +608,6 @@ def draw_bottom_options(screen, track, music_on, v_up, v_down, flip, ng, gs):
 	screen.blit(text_7, (646,642))
 	screen.blit(text_8, (673,664))
 
-
 def draw_rounded_rect(surface, rect, col, corner_rad):
     # ---Function courtesy of Glenn Mackintosh on StackOverflow---
 	# Anti-aliased circles to make corners smoother
@@ -682,7 +686,41 @@ def highlight_sq(screen, colour, sq_from, gs, flip):
 	draw_bordered_rounded_rect(screen,
 		(98+pt_x*50, 198+pt_y*50, SQ_SIZE+4, SQ_SIZE+4), D_BLUE, col, 4, 2)
 
-def draw_sidebar(screen, gs, move_list):
+
+
+# ---DISPLAYING TO SIDE WINDOW-------------------------------------------------
+def display_game_state(screen, gs):
+	header_text = create_text("Current Game State", font_pref, 24, BLK)
+	screen.blit(header_text, (591,190))
+	pg.draw.rect(screen, ML_GRY, (590,209,155,2))
+	labels = ['Move Number', 'Ply Number', 'Turn', ' ', 'Check?', 'Stalemate?',
+	          'Checkmate?', ' ', ' ', 'Pieces Left', 'Pts of Material',
+	          'KS Castling Rights', 'QS Castling Rights', ' ', ' ', 
+	          'Pieces Left', 'Pts of Material',
+	          'KS Castling Rights', 'QS Castling Rights']
+
+	colour = 'White' if gs.turn == 'w' else 'Black'
+	values = [(gs.ply_num + 1)//2, gs.ply_num, colour, '', gs.check,
+			  gs.stalemate, gs.checkmate, '', '', gs.pieces['w']['P'],
+			  gs.pieces_pts['w'], gs.castling_rights_ks['w'],
+			  gs.castling_rights_qs['w'], '', '', gs.pieces['b']['P'],
+			  gs.pieces_pts['b'], gs.castling_rights_ks['b'],
+			  gs.castling_rights_qs['b']]
+	
+	pg.draw.rect(screen, ML_GRY, (695,235,2,345))
+	white_header = create_text('White', font_pref, 20, BLK)
+	screen.blit(white_header, (590,378))
+	pg.draw.rect(screen, BLK, (560,395,100,2))
+	black_header = create_text('Black', font_pref, 20, BLK)
+	screen.blit(black_header, (590,488))
+	pg.draw.rect(screen, BLK, (560,505,100,2))
+	for i in range(len(labels)):
+		label = create_text(labels[i], font_pref, 18, BLK)
+		screen.blit(label, (560,240+18*i))
+		value = create_text(str(values[i]), font_pref, 18, BLK)
+		screen.blit(value, (736,240+18*i))
+	
+def display_moves(screen, gs, move_list):
 	draw_bordered_rounded_rect(screen, (540,180,255,440), L_GRY, D_GRY, 5, 3)
 	header_text = create_text(("Game " + str(gs.game_num)), font_pref, 24, BLK)
 	screen.blit(header_text, (632,190))
@@ -732,51 +770,15 @@ def update_move_list(moves):
 
 # ---PRINT TO SHELL------------------------------------------------------------
 def print_welcome_msg():
-	print_spaces()
-	print('*'*68+'\n'+' '*26+'Chessterton Grove\n'+' '*31+'NEW GAME\n'+'*'*68)
+	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
+	print('*'*68)
+	print(' '*26 + 'Chessterton Grove')
+	print(' '*31 + 'NEW GAME')
+	print('*'*68)
 
-def print_spaces():
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-	print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n')
-
-def print_current_gamestate(gs, click_xy='N/A', sq_from='N/A', sq_to='N/A'):
-	# Print out each gamestate 'attribute' on separate lines under neat columns
-	print('\n','-'*24, 'Current Game State', '-'*24)
-	names = ['Board:',
-			 'Ply Number:',
-			 'Turn:',
-			 'Check?',
-			 'Stalemate?',
-			 'Checkmate?',  
-			 'Insuff. Mat.?',
-			 'Pieces Left (wht):',
-			 'Pieces Left (blk):',
-		     'Points of Material:', 
-			 'QS Castling Rights (wht):',
-			 'KS Castling Rights (wht):',
-			 'QS Castling Rights (blk):',
-			 'KS Castling Rights (blk):',
-			 'Moves Stored:',
-			 ' ',
-			 '--- User input ---',
-			 'Click (X,Y):',
-			 'From Square Selected:',
-			 'To Square Selected:']
-	values = [gs.board, gs.ply_num, gs.turn, gs.check, gs.stalemate,
-			  gs.checkmate, gs.insuff_mat, gs.pieces['w'], gs.pieces['b'],
-			  gs.pieces_pts, gs.castling_rights_qs['w'], gs.castling_rights_ks['w'],
-			  gs.castling_rights_qs['b'], gs.castling_rights_ks['b'],
-			  len(gs.moves), ' ', ' ', click_xy, sq_from, sq_to]
-	for name in range(len(names)):
-		offset = 25 - len(str(names[name]))
-		if isinstance(values[name], np.ndarray):
-			# Extra spaces added to first column to even out np.arrays
-			print(names[name], ' '*offset, values[name][0])
-			for i in range(1, len(values[name][1])):
-				print(' '*(offset+len(str(names[name]))+1), values[name][i])
-		else:
-			print(names[name], ' '*offset, values[name])	
-	print('\n\n')
+def print_board(board):
+	print('\n\n' + ' '*11 + '--- BOARD STATE ---')
+	print(' '*10 + '(as stored internally)\n\n' + str(board) + '\n')
 
 
 # ---MUSIC AND SOUND CHANGES---------------------------------------------------
@@ -813,23 +815,23 @@ def terminate():
 
 def main():
 	# ---MISC INITS
-	new_game = True
-	click_xy = sq_from = sq_to = []  # User-derived inputs
+	new_game = sound_on = music_on = True
 	toggle_flip = vol_up = vol_down = show_gs = False
-	flip_delay = jukebox_delay = vol_button_hold = 0
-	sound_on = music_on = True
+	flip_delay = jukebox_delay = vol_button_hold = game_counter = 0
 	current_track = None
-	game_counter = 1
+
+	click_xy = sq_from = sq_to = []  # User-sourced input variables
 
 	bg = pg.image.load('img/bg.png').convert_alpha()
 	load_images()
+
 	print_welcome_msg()
 
 	while True:
-		# ---Various delays to keep buttons lit up for some time
+		# ---New game & various delays to keep buttons lit up for some time
 		if new_game:
-			gs = GameState(game_counter)
 			game_counter += 1
+			gs = GameState(game_counter)	
 			ng_button_hold = 3
 		if ng_button_hold > 0:
 			ng_button = True
@@ -845,7 +847,7 @@ def main():
 		else:
 			vol_up = vol_down = False
 
-		# ---Draw all elements to screen
+		# ---Draw main elements to screen
 		win.blit((bg), (0,0))
 		draw_chessboard(win, toggle_flip)
 		if sq_from and not sq_to:
@@ -855,19 +857,24 @@ def main():
 		if new_game:
 			move_list = []
 			if not current_track:
-				current_track = jukebox('1')	
+				current_track = jukebox('3')	
 		new_game = False
 
 		draw_bottom_options(win, int(current_track), music_on,
 						    vol_up, vol_down, toggle_flip, ng_button, show_gs)
-		draw_sidebar(win, gs, move_list)
-		
-		# ---From third move (5th ply) onwards, check if game is over
-		if len(gs.moves) >= 5:
-			game_over_info = gs.is_game_over()
-			if game_over_info != '':
-				draw_game_over_message(win, game_over_info)
 
+		# ---Display either move list or game state on sidebar
+		draw_bordered_rounded_rect(win, (540,180,255,440), L_GRY, D_GRY, 5, 3)
+		if show_gs:
+			display_game_state(win, gs)
+		else:
+			display_moves(win, gs, move_list)
+			# ---From third move (5th ply) onwards, check if game is over
+			if len(gs.moves) >= 5:
+				game_over_info = gs.is_game_over()
+				if game_over_info != '':
+					draw_game_over_message(win, game_over_info)
+	
 
 		# ---MOUSE IS CLICKED
 		if click_xy:
@@ -965,13 +972,8 @@ def main():
 					new_game = True
 				if e.key == K_g:
 					show_gs = False
-					print_current_gamestate(gs, click_xy, sq_from, sq_to)
 				if e.key == K_b:
-					print('\n' + str(gs.board) + '\n')
-				if e.key == K_l and gs.moves: 
-					print_last_move(gs.moves[-1])
-				if e.key == K_t:
-					pass
+					print_board(gs.board)
 
 		pg.display.update()
 		clock.tick(FPS)
