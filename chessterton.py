@@ -52,6 +52,7 @@
 # 25.08.20 music & sfx + bottom game options section finalized
 # 27.08.20 identifying check, forbidding walking into check, and counting valid moves - all functional
 # 27.08.20 identifying checkmate and displaying moves
+# 28.08.20 sidebar glitches fixes; includes move number if white; counting pieces and piece pts
 
 
 # ---IMPORTS-------------------------------------------------------------------
@@ -233,50 +234,44 @@ class GameState:
 			return 'Insuff. material! Draw.'
 		return ''
 
-	def count_pieces(self):
-		if len(self.moves < 3):
-			return self.pieces
-		else:
-			pieces = {'w': {'Q':0, 'R':0, 'N':0, 'B':0, 'P':0},
-			          'b': {'Q':0, 'R':0, 'N':0, 'B':0, 'P':0}}
-			for colour in pieces.keys():
-				for kind in pieces[colour].keys():
-					for piece in np.where(self.board == colour+kind):
-						pieces[colour][kind] += 1
-		return pieces
-		
-	def count_points(self):
-		if len(self.moves < 3):
-			return self.pieces_pts
-		else:
-			pieces_pts = {'w': 0, 'b': 0}
-			for colour in self.pieces.keys():
-				for kind in pieces[colour].keys():
-					pieces_pts[colour][kind] *= PIECE_VAL[kind]
-		return pieces_pts
 
 	def make_move(self, new_move):
+		# Update counts if piece has been captured
+		if new_move.is_en_passant:
+			self.pieces[swap(self.turn)]['P'] -= 1
+			self.pieces_pts[swap(self.turn)] -= 1
+		elif new_move.is_capture:
+			self.pieces[swap(self.turn)][new_move.dest_sq[-1]] -= 1
+			self.pieces_pts[swap(self.turn)] -= PIECE_VAL[new_move.dest_sq[-1]]
 		self.update_board(new_move)
+
+		# Update castle rights if rook or king moved
 		if (
 				(new_move.is_castle_qs) or
 				(new_move.piece_kind == 'R' and new_move.from_x == 0)
 				):
 			self.castling_rights_qs[self.turn] = False
-		if (
+		elif (
 				(new_move.is_castle_ks) or
 				(new_move.piece_kind == 'R' and new_move.from_x == 7)
 				):
 			self.castling_rights_ks[self.turn] = False
-		if new_move.piece_kind == 'K':
+		elif new_move.piece_kind == 'K':
 			self.castling_rights_qs[self.turn] = False
 			self.castling_rights_ks[self.turn] = False
+		
+		# Update check, checkmate and stalemate info
 		self.check = new_move.is_check
 		self.checkmate = new_move.opp_moves_left == 0 and new_move.is_check
 		self.stalemate = new_move.opp_moves_left == 0 and not new_move.is_check
+		
+		# Add move info to game state's move log variable for future reference
+		# and switch to opponent's turn
 		self.moves.append(new_move)
-
 		self.ply_num += 1
 		self.turn = swap(self.turn)
+
+
 
 
 class Move:
@@ -391,16 +386,16 @@ class Move:
 
 		elif self.piece_kind == 'K':
 			valid_1_sq = abs(self.x_diff) < 2 and abs(self.y_diff) < 2
-			valid_castle_qs = ((self.y_diff == 0 and self.x_diff == -2) and
-							   (gs.castling_rights_qs[self.turn]) and
-							   (gs.board[self.from_y, self.from_x - 1] == '  ') and
-		   					   (gs.board[self.from_y, self.from_x - 2] == '  ') and
-		   					   (gs.board[self.from_y, self.from_x - 3] == '  '))
-			valid_castle_ks = ((self.y_diff == 0 and self.x_diff == 2) and
-							   (gs.castling_rights_ks[self.turn]) and
-							   (gs.board[self.from_y, self.from_x + 1] == '  ') and
-		   					   (gs.board[self.from_y, self.from_x + 2] == '  '))
-			return valid_1_sq or valid_castle_qs or valid_castle_ks
+			valid_cas_qs = ((self.y_diff == 0 and self.x_diff == -2) and
+							(gs.castling_rights_qs[self.turn]) and
+							(gs.board[self.from_y, self.from_x-1] == '  ') and
+		   					(gs.board[self.from_y, self.from_x-2] == '  ') and
+		   					(gs.board[self.from_y, self.from_x-3] == '  '))
+			valid_cas_ks = ((self.y_diff == 0 and self.x_diff == 2) and
+							(gs.castling_rights_ks[self.turn]) and
+							(gs.board[self.from_y, self.from_x+1] == '  ') and
+		   					(gs.board[self.from_y, self.from_x+2] == '  '))
+			return valid_1_sq or valid_cas_qs or valid_cas_ks
 
 	def check_if_walk_into_check(self, gs):
 		post_move_gs = GameState(0)
@@ -484,11 +479,17 @@ def swap(turn):
 
 def to_algebraic(move):
 	# Move() object    -->    <str> in alegraic notation, like exd4+ f8=Q#
-	# If not Castles; gather characters one at a time
+	# Start with move number if white move:
+	if move.turn == 'w':
+		move_num = (str(move.move_num) + '. ')
+	else:
+		move_num = ''
+
+	# If Castles, nothing more added after zeros
 	if move.is_castle_ks:
-		return 'O-O'
+		return (move_num + 'O-O')
 	elif move.is_castle_qs:
-		return 'O-O-O'
+		return (move_num + 'O-O-O')
 
 	# If pawn move, use only letter from square it came from
 	if move.piece_kind != 'P':
@@ -509,7 +510,8 @@ def to_algebraic(move):
 	stalemate = '$' if move.opp_moves_left == 0 and not move.is_check else ''
 	check = '+' if move.is_check and not checkmate else ''
 	full_move = (
-					piece_kind
+					move_num
+				  + piece_kind
 			  	  + capture
 			  	  + destination
 			  	  + queening
@@ -602,50 +604,58 @@ def draw_bottom_options(screen, track, music_on, v_up, v_down, flip, ng, gs):
 	screen.blit(text_8, (673,664))
 
 
-def draw_rounded_rect(surface, rect, col, cor_r):
+def draw_rounded_rect(surface, rect, col, corner_rad):
     # ---Function courtesy of Glenn Mackintosh on StackOverflow---
 	# Anti-aliased circles to make corners smoother
-    if rect.width < 2 * cor_r or rect.height < 2 * cor_r:
+    if rect.width < 2 * corner_rad or rect.height < 2 * corner_rad:
         raise ValueError(f"Both height (rect.height) and width (rect.width) must\
-        				   be > 2 * cner radius ({cor_r})")
+        				   be > 2 * cner radius ({corner_rad})")
 
     # Anti-aliasing circle drawing routines to smooth corners
-    pg.gfxdraw.aacircle(surface, rect.left+cor_r, rect.top+cor_r, cor_r, col)
-    pg.gfxdraw.aacircle(surface, rect.right-cor_r-1, rect.top+cor_r, cor_r, col)
-    pg.gfxdraw.aacircle(surface, rect.left+cor_r, rect.bottom-cor_r-1, cor_r, col)
-    pg.gfxdraw.aacircle(surface, rect.right-cor_r-1, rect.bottom-cor_r-1, cor_r, col)
+    pg.gfxdraw.aacircle(surface,
+    	rect.left+corner_rad, rect.top+corner_rad, corner_rad, col)
+    pg.gfxdraw.aacircle(surface,
+    	rect.right-corner_rad-1, rect.top+corner_rad, corner_rad, col)
+    pg.gfxdraw.aacircle(surface,
+    	rect.left+corner_rad, rect.bottom-corner_rad-1, corner_rad, col)
+    pg.gfxdraw.aacircle(surface,
+    	rect.right-corner_rad-1, rect.bottom-corner_rad-1, corner_rad, col)
 
-    pg.gfxdraw.filled_circle(surface, rect.left+cor_r, rect.top+cor_r, cor_r, col)
-    pg.gfxdraw.filled_circle(surface, rect.right-cor_r-1, rect.top+cor_r, cor_r, col)
-    pg.gfxdraw.filled_circle(surface, rect.left+cor_r, rect.bottom-cor_r-1, cor_r, col)
-    pg.gfxdraw.filled_circle(surface, rect.right-cor_r-1, rect.bottom-cor_r-1, cor_r, col)
+    pg.gfxdraw.filled_circle(surface,
+    	rect.left+corner_rad, rect.top+corner_rad, corner_rad, col)
+    pg.gfxdraw.filled_circle(surface,
+    	rect.right-corner_rad-1, rect.top+corner_rad, corner_rad, col)
+    pg.gfxdraw.filled_circle(surface,
+    	rect.left+corner_rad, rect.bottom-corner_rad-1, corner_rad, col)
+    pg.gfxdraw.filled_circle(surface,
+    	rect.right-corner_rad-1, rect.bottom-corner_rad-1, corner_rad, col)
 
     rect_tmp = pg.Rect(rect)
 
-    rect_tmp.width -= 2*cor_r
+    rect_tmp.width -= 2*corner_rad
     rect_tmp.center = rect.center
     pg.draw.rect(surface, col, rect_tmp)
 
     rect_tmp.width = rect.width
-    rect_tmp.height -= 2*cor_r
+    rect_tmp.height -= 2*corner_rad
     rect_tmp.center = rect.center
     pg.draw.rect(surface, col, rect_tmp)
 
-def draw_bordered_rounded_rect(surface, rect, col, bord_col, corn_rad, bord_th):
-	if corn_rad < 0:
+def draw_bordered_rounded_rect(surface, rect, col, bd_col, corner_rad, bd_th):
+	if corner_rad < 0:
 		raise ValueError(f"Border radius ({corner_rad}) must be >= 0")
 	rect_tmp = pg.Rect(rect)
 	center = rect_tmp.center
 
-	if bord_th:
-		if corn_rad <= 0:
-			pg.draw.rect(surface, bord_col, rect_tmp)
+	if bd_th:
+		if corner_rad <= 0:
+			pg.draw.rect(surface, bd_col, rect_tmp)
 		else:
-			draw_rounded_rect(surface, rect_tmp, bord_col, corn_rad)
-			rect_tmp.inflate_ip(-2*bord_th, -2*bord_th)
-			inner_rad = corn_rad - bord_th + 1
+			draw_rounded_rect(surface, rect_tmp, bd_col, corner_rad)
+			rect_tmp.inflate_ip(-2*bd_th, -2*bd_th)
+			inner_rad = corner_rad - bd_th + 1
 	else:
-		inner_rad = corn_rad
+		inner_rad = corner_rad
 
 	if inner_rad <= 0:
 		pg.draw.rect(surface, col, rect_tmp)
@@ -675,21 +685,28 @@ def highlight_sq(screen, colour, sq_from, gs, flip):
 def draw_sidebar(screen, gs, move_list):
 	draw_bordered_rounded_rect(screen, (540,180,255,440), L_GRY, D_GRY, 5, 3)
 	header_text = create_text(("Game " + str(gs.game_num)), font_pref, 24, BLK)
-	screen.blit(header_text, (636,190))
+	screen.blit(header_text, (632,190))
 	pg.draw.rect(screen, ML_GRY, (590,209,155,2))
 
 	if move_list:
+		# Truncate to show a maximum of 15 moves (30 plies) while preserving
+		# move number and keeping white moves in left column
 		if len(move_list) > 30:
-			# Truncate to show only last 15 moves maximum (30 plies)
-			move_list[-30:]
+			if len(move_list) % 2 == 0:
+				move_list = move_list[-30:]
+			else:
+				move_list = move_list[-29:]
+
 		for i in range(len(move_list)):
 			if i % 2 == 0:
-				text_with_num = (str(int(i/2+1)) + '.  ' + move_list[i])
-				move_text = create_text(text_with_num, font_pref, 22, BLK)
-				if (i/2+1) < 10:	
-					screen.blit(move_text, (600,220+i*10))
-				else:
+				move_text = create_text(move_list[i], font_pref, 22, BLK)
+				# Offset move numbers to the left as more digits are added
+				if move_list[i][2] == '.':
 					screen.blit(move_text, (592,220+i*10))
+				elif move_list[i][3] == '.':
+					screen.blit(move_text, (584,220+i*10))
+				else:
+					screen.blit(move_text, (600,220+i*10))
 			else:
 				move_text = create_text(move_list[i], font_pref, 22, BLK)
 				screen.blit(move_text, (695,220+(i-1)*10))
@@ -724,7 +741,7 @@ def print_spaces():
 
 def print_current_gamestate(gs, click_xy='N/A', sq_from='N/A', sq_to='N/A'):
 	# Print out each gamestate 'attribute' on separate lines under neat columns
-	print('-'*24, 'Current Game State', '-'*24)
+	print('\n','-'*24, 'Current Game State', '-'*24)
 	names = ['Board:',
 			 'Ply Number:',
 			 'Turn:',
@@ -797,7 +814,6 @@ def terminate():
 def main():
 	# ---MISC INITS
 	new_game = True
-	move_list = []
 	click_xy = sq_from = sq_to = []  # User-derived inputs
 	toggle_flip = vol_up = vol_down = show_gs = False
 	flip_delay = jukebox_delay = vol_button_hold = 0
@@ -835,9 +851,13 @@ def main():
 		if sq_from and not sq_to:
 			highlight_sq(win, gs.turn, sq_from, gs, toggle_flip)
 		draw_pieces(win, gs.board, toggle_flip, new_game)
-		if new_game and not current_track:
-			current_track = jukebox('1')
+
+		if new_game:
+			move_list = []
+			if not current_track:
+				current_track = jukebox('1')	
 		new_game = False
+
 		draw_bottom_options(win, int(current_track), music_on,
 						    vol_up, vol_down, toggle_flip, ng_button, show_gs)
 		draw_sidebar(win, gs, move_list)
